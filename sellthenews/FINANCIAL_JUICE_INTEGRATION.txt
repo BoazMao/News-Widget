@@ -74,45 +74,8 @@
 //   
 //   // Add authentication if required:
 //   request.Headers.Add("Authorization", "Bearer YOUR_API_KEY_HERE");
-//
-// TESTING:
-// 
-// 1. Run the app
-// 2. Go to Overview tab - should show both feeds
-// 3. Go to Financial Juice tab - should show headline list
-// 4. Check headlines update every 45 seconds
-// 
-// TROUBLESHOOTING:
-// 
-// • If headlines don't appear:
-//   - Check endpoint URL is correct
-//   - Verify authentication headers are valid
-//   - Check JSON field names match the parser
-//   - Look for HTTP status codes in the UI
-// 
-// • If you get HTTP 404 or 401:
-//   - Endpoint URL is wrong or API key is invalid
-//   - Verify credentials are correct
-//   - Test the endpoint in Postman first
-// 
-// • To debug JSON parsing:
-//   - Add logging in ParseHeadlines() method
-//   - Test API response in JSON validator
-//   - Compare field names with code
-// 
 // RATE LIMITING:
 // 
 // Current refresh interval: 45 seconds
 // If API has stricter limits, adjust in Form1.cs - SetupTimers():
 //   fjRefreshTimer.Interval = 60000;  // 60 seconds
-// 
-// PRODUCTION CHECKLIST:
-// 
-// ☐ Financial Juice API credentials obtained
-// ☐ Endpoint URL configured in FetchLatestHeadlinesAsync()
-// ☐ Authentication headers added if needed
-// ☐ JSON parsing verified against live API response
-// ☐ Refresh interval set appropriately for API rate limits
-// ☐ Error handling tested (disable network, verify UI shows gracefully)
-// ☐ Both tabs display data correctly
-// ☐ Overview combines both feeds without overlap
