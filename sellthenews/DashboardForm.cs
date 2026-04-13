@@ -33,10 +33,10 @@ namespace sellthenews
         // Content controls for each panel
         private Label overviewTitleLabel;
         private Label overviewUpdatedLabel;
-        private TextBox overviewContentBox;
+        private RichTextBox overviewContentBox;
         private ListBox financialJuiceListBox;
 
-        private TextBox stnFullContentBox;
+        private RichTextBox stnFullContentBox;
         private Label stnTitleLabel;
         private Label stnUpdatedLabel;
 
@@ -211,7 +211,7 @@ namespace sellthenews
                 Width = 476,
                 Height = 24,
                 Font = new Font("Segoe UI", 11, FontStyle.Bold),
-                ForeColor = Color.Red,
+                ForeColor = Color.RoyalBlue,
                 Text = "Loading..."
             };
             overviewTitleLabel.BackColor = Color.Transparent;
@@ -228,15 +228,14 @@ namespace sellthenews
             };
             overviewUpdatedLabel.BackColor = Color.Transparent;
 
-            overviewContentBox = new TextBox
+            overviewContentBox = new RichTextBox
             {
                 Left = 12,
                 Top = 60,
                 Width = 476,
                 Height = 270,
-                Multiline = true,
                 ReadOnly = true,
-                ScrollBars = ScrollBars.Vertical,
+                ScrollBars = RichTextBoxScrollBars.Vertical,
                 BorderStyle = BorderStyle.None,
                 BackColor = Color.FromArgb(24, 24, 24),
                 ForeColor = Color.White,
@@ -274,7 +273,7 @@ namespace sellthenews
                 Width = 476,
                 Height = 24,
                 Font = new Font("Segoe UI", 11, FontStyle.Bold),
-                ForeColor = Color.Red,
+                ForeColor = Color.RoyalBlue,
                 Text = "Loading..."
             };
             stnTitleLabel.BackColor = Color.Transparent;
@@ -291,15 +290,14 @@ namespace sellthenews
             };
             stnUpdatedLabel.BackColor = Color.Transparent;
 
-            stnFullContentBox = new TextBox
+            stnFullContentBox = new RichTextBox
             {
                 Left = 12,
                 Top = 60,
                 Width = 476,
                 Height = 270,
-                Multiline = true,
                 ReadOnly = true,
-                ScrollBars = ScrollBars.Vertical,
+                ScrollBars = RichTextBoxScrollBars.Vertical,
                 BorderStyle = BorderStyle.None,
                 BackColor = Color.FromArgb(24, 24, 24),
                 ForeColor = Color.White,
@@ -393,13 +391,13 @@ namespace sellthenews
 
         private void SetupTimers()
         {
-            // Sell The News refresh timer (30 seconds)
+            // Sell The News refresh timer (1 hour - WSB reports don't update frequently)
             stnRefreshTimer = new FormsTimer();
-            stnRefreshTimer.Interval = 30000;
+            stnRefreshTimer.Interval = 3600000; // 1 hour in milliseconds
             stnRefreshTimer.Tick += async (s, e) => await RefreshSellTheNews();
             stnRefreshTimer.Start();
 
-            // Financial Juice refresh timer (45 seconds)
+            // Financial Juice refresh timer (45 seconds - news updates more frequently)
             fjRefreshTimer = new FormsTimer();
             fjRefreshTimer.Interval = 45000;
             fjRefreshTimer.Tick += async (s, e) => await RefreshFinancialJuice();
@@ -418,7 +416,9 @@ namespace sellthenews
 
                 stnTitleLabel.Text = "每日分析报告";
                 stnUpdatedLabel.Text = $"Updated: {currentSummary.UpdatedAt:yyyy-MM-dd HH:mm:ss}";
-                stnFullContentBox.Text = sellTheNewsService.GetFullReport(currentSummary.Markdown);
+
+                string formattedText = sellTheNewsService.GetFullReport(currentSummary.Markdown);
+                SetRichTextBoxWithFormatting(stnFullContentBox, formattedText);
 
                 // Update overview as well
                 overviewTitleLabel.Text = "每日分析报告";
@@ -507,7 +507,7 @@ namespace sellthenews
                 }
             }
 
-            overviewContentBox.Text = overviewText.ToString();
+            SetRichTextBoxWithFormatting(overviewContentBox, overviewText.ToString());
         }
 
         private string ShortenContent(string text, int maxLength)
@@ -519,6 +519,106 @@ namespace sellthenews
                 return text;
 
             return text.Substring(0, maxLength).TrimEnd() + "...";
+        }
+
+        private void SetRichTextBoxWithFormatting(RichTextBox rtb, string text)
+        {
+            rtb.Clear();
+            if (string.IsNullOrWhiteSpace(text))
+                return;
+
+            var lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+
+            foreach (var line in lines)
+            {
+                string trimmed = line.Trim();
+
+                // Headers (▼ ...) - make bold and larger
+                if (trimmed.StartsWith("▼"))
+                {
+                    rtb.SelectionFont = new Font("Segoe UI", 10, FontStyle.Bold);
+                    rtb.SelectionColor = Color.RoyalBlue;
+                    rtb.AppendText(trimmed + "\n");
+                    rtb.SelectionFont = new Font("Segoe UI", 9);
+                    rtb.SelectionColor = Color.White;
+                }
+                // Separator lines (═) - lighter gray
+                else if (trimmed.StartsWith("═"))
+                {
+                    rtb.SelectionColor = Color.Gray;
+                    rtb.AppendText(trimmed + "\n");
+                    rtb.SelectionColor = Color.White;
+                }
+                // Section headers (===...===) - bold white
+                else if (trimmed.StartsWith("==="))
+                {
+                    rtb.SelectionFont = new Font("Segoe UI", 9, FontStyle.Bold);
+                    rtb.AppendText(trimmed + "\n");
+                    rtb.SelectionFont = new Font("Segoe UI", 9);
+                }
+                // Regular text with markdown-like formatting
+                else if (!string.IsNullOrWhiteSpace(trimmed))
+                {
+                    ProcessLineWithFormatting(rtb, trimmed);
+                    rtb.AppendText("\n");
+                }
+                else
+                {
+                    // Empty line
+                    rtb.AppendText("\n");
+                }
+            }
+
+            // Set scroll to top
+            rtb.Select(0, 0);
+            rtb.ScrollToCaret();
+        }
+
+        private void ProcessLineWithFormatting(RichTextBox rtb, string line)
+        {
+            int pos = 0;
+
+            while (pos < line.Length)
+            {
+                // Look for **bold** pattern
+                int boldStart = line.IndexOf("**", pos);
+                if (boldStart >= 0)
+                {
+                    // Add text before bold
+                    if (boldStart > pos)
+                    {
+                        rtb.SelectionFont = new Font("Segoe UI", 9);
+                        rtb.AppendText(line.Substring(pos, boldStart - pos));
+                    }
+
+                    // Find end of bold
+                    int boldEnd = line.IndexOf("**", boldStart + 2);
+                    if (boldEnd >= 0)
+                    {
+                        // Add bold text
+                        rtb.SelectionFont = new Font("Segoe UI", 9, FontStyle.Bold);
+                        rtb.AppendText(line.Substring(boldStart + 2, boldEnd - boldStart - 2));
+                        pos = boldEnd + 2;
+                    }
+                    else
+                    {
+                        // Unclosed bold, add as-is
+                        rtb.SelectionFont = new Font("Segoe UI", 9);
+                        rtb.AppendText(line.Substring(boldStart));
+                        pos = line.Length;
+                    }
+                }
+                else
+                {
+                    // No more bold, add remaining text
+                    rtb.SelectionFont = new Font("Segoe UI", 9);
+                    rtb.AppendText(line.Substring(pos));
+                    pos = line.Length;
+                }
+            }
+
+            rtb.SelectionFont = new Font("Segoe UI", 9);
+            rtb.SelectionColor = Color.White;
         }
 
         private void SetupStyling()

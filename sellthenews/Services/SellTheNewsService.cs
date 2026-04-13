@@ -136,13 +136,8 @@ namespace sellthenews.Services
                         inTable = true;
                     }
 
-                    // Clean up table formatting
-                    string cleanedLine = trimmed
-                        .Replace("**", "")      // Remove bold markers
-                        .Replace("*", "")       // Remove italic markers
-                        .Trim();
-
-                    output.AppendLine(cleanedLine);
+                    // Keep table structure for RichTextBox formatting
+                    output.AppendLine(trimmed);
                     continue;
                 }
 
@@ -153,17 +148,10 @@ namespace sellthenews.Services
                     output.AppendLine();
                 }
 
-                // Regular text - clean formatting
-                string cleanedText = trimmed
-                    .Replace("**", "")          // Remove bold
-                    .Replace("*", "")           // Remove italics
-                    .Replace("__", "")          // Remove underline
-                    .Replace("_", "")           // Remove underline
-                    .Trim();
-
-                if (!string.IsNullOrWhiteSpace(cleanedText))
+                // Regular text - preserve markdown formatting symbols for RichTextBox display
+                if (!string.IsNullOrWhiteSpace(trimmed))
                 {
-                    output.AppendLine(cleanedText);
+                    output.AppendLine(trimmed);
                 }
             }
 
@@ -175,17 +163,14 @@ namespace sellthenews.Services
             if (string.IsNullOrWhiteSpace(input))
                 return "";
 
-            string text = input
-                .Replace("#", "")
-                .Replace("*", "")
-                .Replace("|", " ")
-                .Replace("---", "")
-                .Trim();
+            // For RichTextBox display, preserve markdown formatting symbols
+            string text = input.Trim();
 
             if (text.Length <= maxLength)
                 return text;
 
-            return text.Substring(0, maxLength) + "...";
+            // Truncate while preserving markdown formatting for display
+            return text.Substring(0, maxLength).TrimEnd() + "...";
         }
     }
 }
