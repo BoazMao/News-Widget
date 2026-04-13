@@ -1,0 +1,118 @@
+// FINANCIAL JUICE API INTEGRATION GUIDE
+// 
+// CURRENT STATE:
+// The app is currently using NewsAPI.org as a test endpoint for financial news.
+// This allows you to see the full Overview dashboard working with both feeds.
+// 
+// WHAT'S WORKING NOW:
+// ✓ Sell The News feed loads from: https://sellthenews.org/api/wsb/latest?lang=zh
+// ✓ Financial Juice uses NewsAPI.org for testing: https://newsapi.org/v2/everything?q=market+stocks+finance
+// ✓ Overview tab shows both feeds combined
+// ✓ Financial Juice tab shows headline list
+// 
+// TO SWITCH TO ACTUAL FINANCIAL JUICE API:
+// 
+// 1. Get API credentials from Financial Juice (https://www.financialjuice.com)
+// 
+// 2. Update FinancialJuiceService.cs - FetchLatestHeadlinesAsync() method:
+//    Replace this line:
+//      string url = "https://newsapi.org/v2/everything?q=market+OR+stocks+OR+finance&sortBy=publishedAt&language=en&pageSize=10";
+//    
+//    With your actual Financial Juice API endpoint:
+//      string url = "https://api.financialjuice.com/v1/headlines?limit=15";
+// 
+// 3. Add authentication headers (if required):
+//    request.Headers.Add("Authorization", "Bearer YOUR_API_KEY");
+//    or
+//    request.Headers.Add("X-API-Key", "YOUR_API_KEY");
+// 
+// 4. Update ParseHeadlines() to match Financial Juice response structure:
+//    The current parser handles both:
+//    - Nested response: { "articles": [...] }
+//    - Direct array: [...]
+//    
+//    If Financial Juice uses different field names, update:
+//    - "title" → headline text
+//    - "description" or "summary" → brief description
+//    - "source.name" or "source" → news provider
+//    - "publishedAt" → ISO 8601 timestamp
+// 
+// API RESPONSE FORMAT EXAMPLES:
+// 
+// NewsAPI.org (current test):
+// {
+//   "articles": [
+//     {
+//       "source": { "name": "Bloomberg" },
+//       "title": "Fed Signals Slower Rate Hikes",
+//       "description": "The Federal Reserve...",
+//       "publishedAt": "2024-01-15T14:30:00Z"
+//     }
+//   ]
+// }
+//
+// Financial Juice (expected):
+// {
+//   "headlines": [
+//     {
+//       "id": "abc123",
+//       "title": "Market Close: S&P 500 up 1.2%",
+//       "summary": "Major indices rally...",
+//       "source": "Reuters",
+//       "category": "Markets",
+//       "publishedAt": "2024-01-15T16:00:00Z"
+//     }
+//   ]
+// }
+// 
+// CONFIGURATION TEMPLATE:
+// 
+// In FinancialJuiceService.FetchLatestHeadlinesAsync():
+//
+//   string url = "https://api.financialjuice.com/v1/headlines?limit=15";
+//   var request = new HttpRequestMessage(HttpMethod.Get, url);
+//   
+//   // Add authentication if required:
+//   request.Headers.Add("Authorization", "Bearer YOUR_API_KEY_HERE");
+//
+// TESTING:
+// 
+// 1. Run the app
+// 2. Go to Overview tab - should show both feeds
+// 3. Go to Financial Juice tab - should show headline list
+// 4. Check headlines update every 45 seconds
+// 
+// TROUBLESHOOTING:
+// 
+// • If headlines don't appear:
+//   - Check endpoint URL is correct
+//   - Verify authentication headers are valid
+//   - Check JSON field names match the parser
+//   - Look for HTTP status codes in the UI
+// 
+// • If you get HTTP 404 or 401:
+//   - Endpoint URL is wrong or API key is invalid
+//   - Verify credentials are correct
+//   - Test the endpoint in Postman first
+// 
+// • To debug JSON parsing:
+//   - Add logging in ParseHeadlines() method
+//   - Test API response in JSON validator
+//   - Compare field names with code
+// 
+// RATE LIMITING:
+// 
+// Current refresh interval: 45 seconds
+// If API has stricter limits, adjust in Form1.cs - SetupTimers():
+//   fjRefreshTimer.Interval = 60000;  // 60 seconds
+// 
+// PRODUCTION CHECKLIST:
+// 
+// ☐ Financial Juice API credentials obtained
+// ☐ Endpoint URL configured in FetchLatestHeadlinesAsync()
+// ☐ Authentication headers added if needed
+// ☐ JSON parsing verified against live API response
+// ☐ Refresh interval set appropriately for API rate limits
+// ☐ Error handling tested (disable network, verify UI shows gracefully)
+// ☐ Both tabs display data correctly
+// ☐ Overview combines both feeds without overlap
