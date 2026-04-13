@@ -1,6 +1,6 @@
 ﻿namespace sellthenews
 {
-    partial class Form1
+    partial class DashboardForm
     {
         /// <summary>
         ///  Required designer variable.
@@ -29,9 +29,6 @@
         private void InitializeComponent()
         {
             components = new System.ComponentModel.Container();
-            AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(800, 450);
-            Text = "Form1";
         }
 
         #endregion

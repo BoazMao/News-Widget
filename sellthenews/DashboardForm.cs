@@ -12,7 +12,7 @@ using sellthenews.Services;
 
 namespace sellthenews
 {
-    public partial class Form1 : Form
+    public partial class DashboardForm : Form
     {
         private readonly HttpClient client = new HttpClient();
         private readonly SellTheNewsService sellTheNewsService;
@@ -20,6 +20,7 @@ namespace sellthenews
 
         // UI Controls
         private Button closeButton;
+        private Button refreshButton;
         private Panel tabButtonPanel;
         private Button overviewTab;
         private Button sellTheNewsTab;
@@ -50,7 +51,7 @@ namespace sellthenews
         private Point dragFormPoint;
         private int currentTabIndex = 0;
 
-        public Form1()
+        public DashboardForm()
         {
             InitializeComponent();
 
@@ -87,7 +88,7 @@ namespace sellthenews
             Location = new Point(x, y);
 
             KeyPreview = true;
-            KeyDown += Form1_KeyDown;
+            KeyDown += DashboardForm_KeyDown;
 
             MouseDown += Drag_MouseDown;
             MouseMove += Drag_MouseMove;
@@ -130,6 +131,31 @@ namespace sellthenews
             closeButton.MouseEnter += (s, e) => closeButton.BackColor = Color.FromArgb(60, 60, 60);
             closeButton.MouseLeave += (s, e) => closeButton.BackColor = Color.FromArgb(40, 40, 40);
 
+            // Add refresh button
+            refreshButton = new Button
+            {
+                Text = "↻",
+                Left = 420,
+                Top = 6,
+                Width = 30,
+                Height = 28,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(40, 40, 40),
+                ForeColor = Color.White,
+                TabStop = false
+            };
+            refreshButton.FlatAppearance.BorderSize = 0;
+            refreshButton.Click += async (s, e) =>
+            {
+                refreshButton.Enabled = false;
+                _ = RefreshSellTheNews();
+                _ = RefreshFinancialJuice();
+                await Task.Delay(500);
+                refreshButton.Enabled = true;
+            };
+            refreshButton.MouseEnter += (s, e) => refreshButton.BackColor = Color.FromArgb(60, 60, 60);
+            refreshButton.MouseLeave += (s, e) => refreshButton.BackColor = Color.FromArgb(40, 40, 40);
+
             overviewTab = CreateTabButton(8, 0, "Overview");
             overviewTab.Click += (s, e) => ShowTab(0);
 
@@ -142,6 +168,7 @@ namespace sellthenews
             tabButtonPanel.Controls.Add(overviewTab);
             tabButtonPanel.Controls.Add(sellTheNewsTab);
             tabButtonPanel.Controls.Add(financialJuiceTab);
+            tabButtonPanel.Controls.Add(refreshButton);
             tabButtonPanel.Controls.Add(closeButton);
 
             Controls.Add(tabButtonPanel);
@@ -184,7 +211,7 @@ namespace sellthenews
                 Width = 476,
                 Height = 24,
                 Font = new Font("Segoe UI", 11, FontStyle.Bold),
-                ForeColor = Color.RoyalBlue,
+                ForeColor = Color.Red,
                 Text = "Loading..."
             };
             overviewTitleLabel.BackColor = Color.Transparent;
@@ -247,7 +274,7 @@ namespace sellthenews
                 Width = 476,
                 Height = 24,
                 Font = new Font("Segoe UI", 11, FontStyle.Bold),
-                ForeColor = Color.RoyalBlue,
+                ForeColor = Color.Red,
                 Text = "Loading..."
             };
             stnTitleLabel.BackColor = Color.Transparent;
@@ -584,7 +611,7 @@ namespace sellthenews
             dragging = false;
         }
 
-        private void Form1_KeyDown(object sender, KeyEventArgs e)
+        private void DashboardForm_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.KeyCode == Keys.Escape)
                 Close();
