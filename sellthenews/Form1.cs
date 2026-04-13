@@ -78,6 +78,10 @@ namespace sellthenews
             ForeColor = Color.White;
             Size = new Size(500, 380);
 
+            // Enable DPI awareness for multi-monitor support
+            AutoScaleMode = AutoScaleMode.None;
+            AutoScale = false;
+
             int x = Screen.PrimaryScreen.WorkingArea.Width - Width - 10;
             int y = 10;
             Location = new Point(x, y);
@@ -88,6 +92,9 @@ namespace sellthenews
             MouseDown += Drag_MouseDown;
             MouseMove += Drag_MouseMove;
             MouseUp += Drag_MouseUp;
+
+            // Validate position on each move to keep window on screen
+            LocationChanged += ValidateWindowPosition;
         }
 
         private void SetupTabs()
@@ -98,8 +105,13 @@ namespace sellthenews
                 Top = 0,
                 Width = 500,
                 Height = 36,
-                BackColor = Color.FromArgb(30, 30, 30)
+                BackColor = Color.FromArgb(15, 15, 15)
             };
+
+            // Enable dragging on the tab panel
+            tabButtonPanel.MouseDown += Drag_MouseDown;
+            tabButtonPanel.MouseMove += Drag_MouseMove;
+            tabButtonPanel.MouseUp += Drag_MouseUp;
 
             closeButton = new Button
             {
@@ -205,6 +217,14 @@ namespace sellthenews
                 TabStop = false
             };
 
+            // Disable text selection
+            overviewContentBox.MouseDown += (s, e) => { if (e.Button != MouseButtons.Left) return; };
+
+            // Enable dragging through textbox
+            overviewContentBox.MouseDown += Drag_MouseDown;
+            overviewContentBox.MouseMove += Drag_MouseMove;
+            overviewContentBox.MouseUp += Drag_MouseUp;
+
             overviewPanel.Controls.Add(overviewTitleLabel);
             overviewPanel.Controls.Add(overviewUpdatedLabel);
             overviewPanel.Controls.Add(overviewContentBox);
@@ -260,6 +280,11 @@ namespace sellthenews
                 TabStop = false
             };
 
+            // Disable text selection and enable dragging
+            stnFullContentBox.MouseDown += Drag_MouseDown;
+            stnFullContentBox.MouseMove += Drag_MouseMove;
+            stnFullContentBox.MouseUp += Drag_MouseUp;
+
             sellTheNewsPanel.Controls.Add(stnTitleLabel);
             sellTheNewsPanel.Controls.Add(stnUpdatedLabel);
             sellTheNewsPanel.Controls.Add(stnFullContentBox);
@@ -289,6 +314,11 @@ namespace sellthenews
                 TabStop = false
             };
 
+            // Enable dragging on listbox
+            financialJuiceListBox.MouseDown += Drag_MouseDown;
+            financialJuiceListBox.MouseMove += Drag_MouseMove;
+            financialJuiceListBox.MouseUp += Drag_MouseUp;
+
             financialJuicePanel.Controls.Add(financialJuiceListBox);
 
             Controls.Add(overviewPanel);
@@ -296,6 +326,19 @@ namespace sellthenews
             Controls.Add(financialJuicePanel);
 
             SetStyle(ControlStyles.SupportsTransparentBackColor, true);
+
+            // Add drag handlers to all panels for full-window dragging
+            overviewPanel.MouseDown += Drag_MouseDown;
+            overviewPanel.MouseMove += Drag_MouseMove;
+            overviewPanel.MouseUp += Drag_MouseUp;
+
+            sellTheNewsPanel.MouseDown += Drag_MouseDown;
+            sellTheNewsPanel.MouseMove += Drag_MouseMove;
+            sellTheNewsPanel.MouseUp += Drag_MouseUp;
+
+            financialJuicePanel.MouseDown += Drag_MouseDown;
+            financialJuicePanel.MouseMove += Drag_MouseMove;
+            financialJuicePanel.MouseUp += Drag_MouseUp;
 
             // Add drag handlers to labels
             overviewTitleLabel.MouseDown += Drag_MouseDown;
@@ -346,12 +389,12 @@ namespace sellthenews
             {
                 currentSummary = await sellTheNewsService.FetchLatestSummaryAsync();
 
-                stnTitleLabel.Text = currentSummary.Title;
+                stnTitleLabel.Text = "每日分析报告";
                 stnUpdatedLabel.Text = $"Updated: {currentSummary.UpdatedAt:yyyy-MM-dd HH:mm:ss}";
                 stnFullContentBox.Text = sellTheNewsService.GetFullReport(currentSummary.Markdown);
 
                 // Update overview as well
-                overviewTitleLabel.Text = currentSummary.Title;
+                overviewTitleLabel.Text = "每日分析报告";
                 overviewUpdatedLabel.Text = $"Updated: {currentSummary.UpdatedAt:yyyy-MM-dd HH:mm:ss}";
 
                 // Show STN content + FJ headlines in overview
@@ -412,10 +455,10 @@ namespace sellthenews
         {
             var overviewText = new StringBuilder();
 
-            // Add Sell The News section
+            // Add Sell The News section - FULL Section 1 content
             var stnContent = sellTheNewsService.ExtractMainSection(currentSummary.Markdown);
             overviewText.AppendLine("=== SELL THE NEWS ===");
-            overviewText.AppendLine(ShortenContent(stnContent, 250));
+            overviewText.AppendLine(stnContent);
             overviewText.AppendLine();
 
             // Add Financial Juice section
@@ -473,6 +516,10 @@ namespace sellthenews
         {
             if (e.Button == MouseButtons.Left)
             {
+                // Don't start drag if clicking in scrollable area's scrollbar
+                if (sender is TextBox textBox && e.X > textBox.Width - SystemInformation.VerticalScrollBarWidth)
+                    return;
+
                 dragging = true;
                 dragCursorPoint = Cursor.Position;
                 dragFormPoint = Location;
@@ -483,8 +530,52 @@ namespace sellthenews
         {
             if (dragging)
             {
-                Point diff = Point.Subtract(Cursor.Position, new Size(dragCursorPoint));
-                Location = Point.Add(dragFormPoint, new Size(diff));
+                Point currentCursorPos = Cursor.Position;
+
+                // Calculate the delta with proper multi-monitor support
+                int deltaX = currentCursorPos.X - dragCursorPoint.X;
+                int deltaY = currentCursorPos.Y - dragCursorPoint.Y;
+
+                // Calculate new position
+                int newX = dragFormPoint.X + deltaX;
+                int newY = dragFormPoint.Y + deltaY;
+
+                // Validate position across multiple monitors
+                Point newLocation = ValidatePositionForMultiMonitor(new Point(newX, newY));
+                Location = newLocation;
+            }
+        }
+
+        private Point ValidatePositionForMultiMonitor(Point proposedLocation)
+        {
+            // Get all available screens
+            Screen[] screens = Screen.AllScreens;
+
+            // Find the monitor that will contain the center of the window
+            Screen targetScreen = Screen.FromPoint(new Point(
+                proposedLocation.X + Width / 2,
+                proposedLocation.Y + Height / 2
+            ));
+
+            // Ensure window doesn't go too far off-screen
+            int minX = targetScreen.WorkingArea.Left - Width + 50;
+            int maxX = targetScreen.WorkingArea.Right - 50;
+            int minY = targetScreen.WorkingArea.Top - Height + 20;
+            int maxY = targetScreen.WorkingArea.Bottom - 20;
+
+            return new Point(
+                Math.Max(minX, Math.Min(maxX, proposedLocation.X)),
+                Math.Max(minY, Math.Min(maxY, proposedLocation.Y))
+            );
+        }
+
+        private void ValidateWindowPosition(object sender, EventArgs e)
+        {
+            // Ensure window stays on a valid screen when Location changes
+            Point validPosition = ValidatePositionForMultiMonitor(Location);
+            if (validPosition != Location)
+            {
+                Location = validPosition;
             }
         }
 
