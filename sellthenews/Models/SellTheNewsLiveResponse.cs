@@ -7,14 +7,12 @@ namespace sellthenews.Models
     {
         public List<SellTheNewsLiveItem> Data { get; set; }
         public List<SellTheNewsLiveItem> PinnedPosts { get; set; }
-        public string Etag { get; set; }
         public DateTime FetchedAt { get; set; }
 
         public SellTheNewsLiveResponse()
         {
             Data = new List<SellTheNewsLiveItem>();
             PinnedPosts = new List<SellTheNewsLiveItem>();
-            Etag = "";
             FetchedAt = DateTime.Now;
         }
     }

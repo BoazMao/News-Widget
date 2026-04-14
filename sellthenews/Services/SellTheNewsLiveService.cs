@@ -1,7 +1,7 @@
 using System;
-using System.Collections.Generic;
 using System.Net.Http;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using sellthenews.Models;
 
@@ -10,7 +10,6 @@ namespace sellthenews.Services
     public class SellTheNewsLiveService
     {
         private readonly HttpClient client;
-        private string lastEtag = "";
         private SellTheNewsLiveResponse cachedResponse;
 
         public SellTheNewsLiveService(HttpClient httpClient = null)
@@ -19,67 +18,36 @@ namespace sellthenews.Services
             cachedResponse = new SellTheNewsLiveResponse();
         }
 
-        /// <summary>
-        /// Fetches live news with ETag-based caching.
-        /// Returns null if server returns 304 Not Modified.
-        /// Returns the response if new data available (200 OK).
-        /// </summary>
         public async Task<SellTheNewsLiveResponse> FetchLiveNewsAsync()
         {
             try
             {
-                string url = "https://sellthenews.org/api/live/recent?limit=15&offset=0&lang=zh&sources=wsj,nyt,bloomberg,ft&marketOnly=1";
+                string url =
+                    $"https://sellthenews.org/api/live/recent?limit=15&offset=0&lang=zh&sources=wsj,nyt,bloomberg,ft&marketOnly=1&_ts={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
 
-                var request = new HttpRequestMessage(HttpMethod.Get, url);
-
-                // Add If-None-Match header if we have a cached ETag
-                if (!string.IsNullOrWhiteSpace(lastEtag))
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.Pragma.ParseAdd("no-cache");
+                request.Headers.CacheControl = new System.Net.Http.Headers.CacheControlHeaderValue
                 {
-                    request.Headers.Add("If-None-Match", lastEtag);
-                    System.Diagnostics.Debug.WriteLine($"FetchLiveNewsAsync: Sending If-None-Match: {lastEtag}");
-                }
+                    NoCache = true,
+                    NoStore = true,
+                    MustRevalidate = true,
+                    MaxAge = TimeSpan.Zero
+                };
 
-                var response = await client.SendAsync(request);
+                using var response = await client.SendAsync(request, HttpCompletionOption.ResponseContentRead);
+                response.EnsureSuccessStatusCode();
 
-                // 304 Not Modified - use cached data
-                if ((int)response.StatusCode == 304)
-                {
-                    System.Diagnostics.Debug.WriteLine("FetchLiveNewsAsync: Got 304 Not Modified");
-                    return null; // Signal that no update is needed
-                }
+                string json = await response.Content.ReadAsStringAsync();
+                var liveResponse = ParseLiveResponse(json);
+                liveResponse.FetchedAt = DateTime.Now;
 
-                // 200 OK - parse new data
-                if (response.IsSuccessStatusCode)
-                {
-                    string json = await response.Content.ReadAsStringAsync();
-                    System.Diagnostics.Debug.WriteLine($"FetchLiveNewsAsync: Got 200 OK, JSON length: {json.Length}");
-                    System.Diagnostics.Debug.WriteLine($"FetchLiveNewsAsync: JSON first 500 chars: {json.Substring(0, Math.Min(500, json.Length))}");
-
-                    var liveResponse = ParseLiveResponse(json);
-
-                    // Store the new ETag for next request
-                    if (response.Headers.ETag != null)
-                    {
-                        lastEtag = response.Headers.ETag.Tag;
-                        System.Diagnostics.Debug.WriteLine($"FetchLiveNewsAsync: Stored ETag: {lastEtag}");
-                    }
-
-                    liveResponse.FetchedAt = DateTime.Now;
-                    cachedResponse = liveResponse;
-
-                    System.Diagnostics.Debug.WriteLine($"FetchLiveNewsAsync: Parsed {liveResponse.Data.Count} items, {liveResponse.PinnedPosts.Count} pinned");
-
-                    return liveResponse;
-                }
-
-                System.Diagnostics.Debug.WriteLine($"FetchLiveNewsAsync: Got status {response.StatusCode}");
-                // Other error
-                return null;
+                cachedResponse = liveResponse;
+                return liveResponse;
             }
-            catch (Exception ex)
+            catch
             {
-                System.Diagnostics.Debug.WriteLine($"Error fetching live news: {ex.Message}\n{ex.StackTrace}");
-                return null;
+                return cachedResponse;
             }
         }
 
@@ -87,56 +55,33 @@ namespace sellthenews.Services
         {
             var response = new SellTheNewsLiveResponse();
 
-            try
+            using JsonDocument doc = JsonDocument.Parse(json);
+            JsonElement root = doc.RootElement;
+
+            if (root.TryGetProperty("pinnedPosts", out JsonElement pinnedElement) &&
+                pinnedElement.ValueKind == JsonValueKind.Array)
             {
-                using JsonDocument doc = JsonDocument.Parse(json);
-                JsonElement root = doc.RootElement;
-
-                System.Diagnostics.Debug.WriteLine($"ParseLiveResponse: Root element kind = {root.ValueKind}");
-
-                // Extract ETag if present in response body
-                if (root.TryGetProperty("etag", out JsonElement etagElement))
+                foreach (var item in pinnedElement.EnumerateArray())
                 {
-                    response.Etag = etagElement.GetString() ?? "";
-                }
-
-                // Parse pinned posts
-                if (root.TryGetProperty("pinnedPosts", out JsonElement pinnedElement) && pinnedElement.ValueKind == JsonValueKind.Array)
-                {
-                    System.Diagnostics.Debug.WriteLine($"ParseLiveResponse: Found pinnedPosts array");
-                    foreach (var item in pinnedElement.EnumerateArray())
+                    var parsed = ParseLiveItem(item);
+                    if (parsed != null)
                     {
-                        var liveItem = ParseLiveItem(item);
-                        if (liveItem != null)
-                        {
-                            response.PinnedPosts.Add(liveItem);
-                            System.Diagnostics.Debug.WriteLine($"  - Added pinned post: {liveItem.Title}");
-                        }
+                        response.PinnedPosts.Add(parsed);
                     }
-                }
-
-                // Parse regular data items
-                if (root.TryGetProperty("data", out JsonElement dataElement) && dataElement.ValueKind == JsonValueKind.Array)
-                {
-                    System.Diagnostics.Debug.WriteLine($"ParseLiveResponse: Found data array with {dataElement.GetArrayLength()} items");
-                    foreach (var item in dataElement.EnumerateArray())
-                    {
-                        var liveItem = ParseLiveItem(item);
-                        if (liveItem != null)
-                        {
-                            response.Data.Add(liveItem);
-                            System.Diagnostics.Debug.WriteLine($"  - Added item: {liveItem.Title}");
-                        }
-                    }
-                }
-                else
-                {
-                    System.Diagnostics.Debug.WriteLine($"ParseLiveResponse: No 'data' property found or not array");
                 }
             }
-            catch (Exception ex)
+
+            if (root.TryGetProperty("data", out JsonElement dataElement) &&
+                dataElement.ValueKind == JsonValueKind.Array)
             {
-                System.Diagnostics.Debug.WriteLine($"Error parsing live response: {ex.Message}\n{ex.StackTrace}");
+                foreach (var item in dataElement.EnumerateArray())
+                {
+                    var parsed = ParseLiveItem(item);
+                    if (parsed != null)
+                    {
+                        response.Data.Add(parsed);
+                    }
+                }
             }
 
             return response;
@@ -146,54 +91,17 @@ namespace sellthenews.Services
         {
             try
             {
-                var item = new SellTheNewsLiveItem();
-
-                item.Id = element.TryGetProperty("id", out var id) ? id.GetString() ?? "" : "";
-                item.Title = element.TryGetProperty("title", out var title) ? title.GetString() ?? "" : "";
-                item.BodyHtml = element.TryGetProperty("bodyHtml", out var body) ? body.GetString() ?? "" : "";
-                item.Url = element.TryGetProperty("url", out var url) ? url.GetString() ?? "" : "";
-                item.Source = element.TryGetProperty("source", out var source) ? source.GetString() ?? "" : "";
-
-                // SourceLabel comes from "source" field (e.g., "wsj", "ft", "nyt", "bloomberg")
-                // Or fall back to "coverage" if source is empty
-                if (element.TryGetProperty("source", out var srcElement))
+                var item = new SellTheNewsLiveItem
                 {
-                    item.SourceLabel = srcElement.GetString() ?? "";
-                }
-                else if (element.TryGetProperty("coverage", out var coverageStrElement))
-                {
-                    item.SourceLabel = coverageStrElement.GetString() ?? "";
-                }
-
-                // Parse time
-                if (element.TryGetProperty("time", out var timeElement))
-                {
-                    string timeStr = timeElement.GetString() ?? "";
-                    if (DateTime.TryParse(timeStr, out var parsedTime))
-                        item.Time = parsedTime;
-                }
-
-                // Parse tickers array (if it's an array, otherwise skip)
-                if (element.TryGetProperty("tickers", out var tickersElement) && tickersElement.ValueKind == JsonValueKind.Array)
-                {
-                    var tickerList = new List<TickerInfo>();
-                    foreach (var ticker in tickersElement.EnumerateArray())
-                    {
-                        try
-                        {
-                            var tickerInfo = new TickerInfo();
-                            if (ticker.TryGetProperty("symbol", out var symbol))
-                                tickerInfo.Symbol = symbol.GetString() ?? "";
-                            if (ticker.TryGetProperty("direction", out var direction))
-                                tickerInfo.Direction = direction.GetString() ?? "";
-
-                            if (!string.IsNullOrWhiteSpace(tickerInfo.Symbol))
-                                tickerList.Add(tickerInfo);
-                        }
-                        catch { }
-                    }
-                    item.Tickers = tickerList;
-                }
+                    Title = element.TryGetProperty("title", out var title)
+                        ? title.GetString() ?? ""
+                        : "",
+                    Body = element.TryGetProperty("bodyHtml", out var bodyHtml)
+                        ? HtmlToPlainText(bodyHtml.GetString() ?? "")
+                        : "",
+                    Source = GetSourceText(element),
+                    Time = ParseTime(element)
+                };
 
                 return item;
             }
@@ -203,9 +111,54 @@ namespace sellthenews.Services
             }
         }
 
-        /// <summary>
-        /// Gets the last cached response without making a network request.
-        /// </summary>
+        private string GetSourceText(JsonElement element)
+        {
+            if (element.TryGetProperty("sourceLabel", out var sourceLabel))
+            {
+                string label = sourceLabel.GetString() ?? "";
+                if (!string.IsNullOrWhiteSpace(label))
+                    return label;
+            }
+
+            if (element.TryGetProperty("source", out var source))
+            {
+                return source.GetString() ?? "";
+            }
+
+            return "";
+        }
+
+        private DateTime ParseTime(JsonElement element)
+        {
+            if (element.TryGetProperty("time", out var timeElement))
+            {
+                string timeText = timeElement.GetString() ?? "";
+                if (DateTime.TryParse(timeText, out var parsed))
+                    return parsed;
+            }
+
+            return DateTime.Now;
+        }
+
+        private string HtmlToPlainText(string html)
+        {
+            if (string.IsNullOrWhiteSpace(html))
+                return "";
+
+            string text = html;
+
+            text = Regex.Replace(text, @"<br\s*/?>", "\n", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"</p\s*>", "\n\n", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"<li\s*>", "• ", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"</li\s*>", "\n", RegexOptions.IgnoreCase);
+
+            text = Regex.Replace(text, @"<[^>]+>", "");
+            text = System.Net.WebUtility.HtmlDecode(text);
+
+            text = Regex.Replace(text, @"\n{3,}", "\n\n");
+            return text.Trim();
+        }
+
         public SellTheNewsLiveResponse GetCachedResponse()
         {
             return cachedResponse;

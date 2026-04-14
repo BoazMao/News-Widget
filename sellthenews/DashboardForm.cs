@@ -50,9 +50,6 @@ namespace sellthenews
         private List<FinancialJuiceHeadline> currentHeadlines;
         private SellTheNewsLiveResponse currentLiveNews;
 
-        // Live news history cache (for past hour)
-        private List<(SellTheNewsLiveItem item, DateTime fetchedAt)> liveNewsHistory = new List<(SellTheNewsLiveItem, DateTime)>();
-
         private bool dragging = false;
         private Point dragCursorPoint;
         private Point dragFormPoint;
@@ -455,36 +452,19 @@ namespace sellthenews
             {
                 var liveResponse = await sellTheNewsLiveService.FetchLiveNewsAsync();
 
-                // null means 304 Not Modified - use cached items from past hour
+                // If response is null (304 Not Modified), do nothing - keep showing current data
                 if (liveResponse == null)
                 {
-                    System.Diagnostics.Debug.WriteLine("RefreshLiveNews: Got 304, showing cached items");
-                    // Still update display with cached items from history
-                    UpdateLiveNewsDisplay();
-                    liveNewsStatusLabel.Text = $"Updated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}";
+                    System.Diagnostics.Debug.WriteLine("RefreshLiveNews: Got 304 Not Modified, keeping current data");
                     return;
                 }
 
-                System.Diagnostics.Debug.WriteLine($"RefreshLiveNews: Got {liveResponse.Data.Count} items, {liveResponse.PinnedPosts.Count} pinned");
+                System.Diagnostics.Debug.WriteLine($"RefreshLiveNews: Got new data - {liveResponse.Data.Count} items, {liveResponse.PinnedPosts.Count} pinned");
 
+                // Always replace with fresh API data
                 currentLiveNews = liveResponse;
 
-                // Add new items to history cache
-                foreach (var item in liveResponse.Data)
-                {
-                    liveNewsHistory.Add((item, DateTime.Now));
-                }
-                foreach (var pinnedItem in liveResponse.PinnedPosts)
-                {
-                    liveNewsHistory.Add((pinnedItem, DateTime.Now));
-                }
-
-                // Clean up old items (older than 1 hour)
-                var oneHourAgo = DateTime.Now.AddHours(-1);
-                liveNewsHistory.RemoveAll(x => x.fetchedAt < oneHourAgo);
-
-                System.Diagnostics.Debug.WriteLine($"RefreshLiveNews: History cache now has {liveNewsHistory.Count} items");
-
+                // Update display immediately
                 UpdateLiveNewsDisplay();
                 liveNewsStatusLabel.Text = $"Updated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}";
             }
@@ -504,69 +484,33 @@ namespace sellthenews
         {
             var sb = new StringBuilder();
 
-            // Collect all items: pinned posts first, then regular data, then history
             var allItems = new List<SellTheNewsLiveItem>();
-            var seenIds = new HashSet<string>();
 
-            // Add pinned posts
             if (currentLiveNews?.PinnedPosts.Count > 0)
             {
-                foreach (var post in currentLiveNews.PinnedPosts)
-                {
-                    if (!string.IsNullOrEmpty(post.Id))
-                        seenIds.Add(post.Id);
-                    allItems.Add(post);
-                }
+                allItems.AddRange(currentLiveNews.PinnedPosts);
             }
 
-            // Add regular news items
             if (currentLiveNews?.Data.Count > 0)
             {
-                foreach (var item in currentLiveNews.Data)
-                {
-                    if (!string.IsNullOrEmpty(item.Id))
-                        seenIds.Add(item.Id);
-                    allItems.Add(item);
-                }
+                allItems.AddRange(currentLiveNews.Data);
             }
 
-            // Add cached history items (avoid duplicates)
-            foreach (var (histItem, _) in liveNewsHistory)
-            {
-                if (histItem != null && (string.IsNullOrEmpty(histItem.Id) || !seenIds.Contains(histItem.Id)))
-                {
-                    allItems.Add(histItem);
-                    if (!string.IsNullOrEmpty(histItem.Id))
-                        seenIds.Add(histItem.Id);
-                }
-            }
-
-            // Debug: Log collection counts
-            System.Diagnostics.Debug.WriteLine($"FormatLiveNewsContent: currentLiveNews.Data={currentLiveNews?.Data.Count ?? 0}, history={liveNewsHistory.Count}, total items={allItems.Count}");
-            if (allItems.Count > 0)
-            {
-                System.Diagnostics.Debug.WriteLine($"FormatLiveNewsContent: First item title: {allItems[0].Title}, source: {allItems[0].SourceLabel}");
-            }
-
-            // If no items at all, show placeholder
             if (allItems.Count == 0)
             {
                 sb.AppendLine("No live news available");
                 return sb.ToString();
             }
 
-            // Format each item: title, body, source, timestamp
             foreach (var item in allItems)
             {
-                sb.AppendLine($"[{item.SourceLabel}]");
+                sb.AppendLine($"▼ {item.Source}");
                 sb.AppendLine(item.Title);
                 sb.AppendLine();
 
-                if (!string.IsNullOrWhiteSpace(item.BodyHtml))
+                if (!string.IsNullOrWhiteSpace(item.Body))
                 {
-                    // Strip HTML tags
-                    string bodyText = System.Text.RegularExpressions.Regex.Replace(item.BodyHtml, "<[^>]*>", "");
-                    sb.AppendLine(bodyText);
+                    sb.AppendLine(item.Body);
                     sb.AppendLine();
                 }
 
