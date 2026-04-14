@@ -8,15 +8,14 @@ PROJECT STRUCTURE:
 - Program.cs: Entry point
 
 FEATURES:
-✓ Sell The News Feed (30s refresh)
-✓ Financial Juice Feed (45s refresh)  
-✓ Overview Dashboard (combined view)
+✓ Sell The News Feed
+✓ Financial Juice Feed  
 ✓ Tab Navigation (3 tabs)
 ✓ Independent Timers (non-blocking)
 ✓ Error Resilience (one feed failing doesn't break others)
 ✓ Desktop Widget (always-on-top, draggable, compact)
 ✓ Dark Theme (modern UI)
-✓ Full Report Display (all sections with formatting)
+✓ Full Report Display
 
 API ENDPOINTS:
 - Sell The News: https://sellthenews.org/api/wsb/latest?lang=zh
@@ -24,9 +23,8 @@ API ENDPOINTS:
 
 WINDOW INFO:
 - Size: 500x380 pixels
-- Position: Top-right corner
-- Always-on-top, draggable from anywhere
-- Tab bar darker than content area
+- Default Position: Top-right corner
+- Always-on-top
 
 REFRESH SCHEDULE:
 - Sell The News: 30 seconds
