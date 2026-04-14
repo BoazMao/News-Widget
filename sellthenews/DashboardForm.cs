@@ -399,9 +399,9 @@ namespace sellthenews
             fjRefreshTimer.Tick += async (s, e) => await RefreshFinancialJuice();
             fjRefreshTimer.Start();
 
-            // Live News refresh timer (45 seconds - same as Financial Juice with ETag caching for efficiency)
+            // Live News refresh timer
             liveRefreshTimer = new FormsTimer();
-            liveRefreshTimer.Interval = 45000; // 45 seconds
+            liveRefreshTimer.Interval = 5000; // 5 seconds
             liveRefreshTimer.Tick += async (s, e) => await RefreshLiveNews();
             liveRefreshTimer.Start();
 
@@ -450,72 +450,45 @@ namespace sellthenews
         {
             try
             {
-                var liveResponse = await sellTheNewsLiveService.FetchLiveNewsAsync();
-
-                // If response is null (304 Not Modified), do nothing - keep showing current data
-                if (liveResponse == null)
-                {
-                    System.Diagnostics.Debug.WriteLine("RefreshLiveNews: Got 304 Not Modified, keeping current data");
-                    return;
-                }
-
-                System.Diagnostics.Debug.WriteLine($"RefreshLiveNews: Got new data - {liveResponse.Data.Count} items, {liveResponse.PinnedPosts.Count} pinned");
-
-                // Always replace with fresh API data
-                currentLiveNews = liveResponse;
-
-                // Update display immediately
+                currentLiveNews = await sellTheNewsLiveService.FetchLiveNewsAsync();
                 UpdateLiveNewsDisplay();
-                liveNewsStatusLabel.Text = $"Updated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}";
+                liveNewsStatusLabel.Text = $"Updated: {currentLiveNews.FetchedAt:yyyy-MM-dd HH:mm:ss}";
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"RefreshLiveNews exception: {ex}");
                 liveNewsStatusLabel.Text = $"Error: {ex.Message}";
             }
         }
 
         private void UpdateLiveNewsDisplay()
         {
-            SetRichTextBoxWithFormatting(liveNewsContentBox, FormatLiveNewsContent(), scrollToTop: false);
+            string content = FormatLiveNewsContent();
+            liveNewsContentBox.Clear();
+            liveNewsContentBox.Text = content;
         }
 
         private string FormatLiveNewsContent()
         {
             var sb = new StringBuilder();
 
-            var allItems = new List<SellTheNewsLiveItem>();
-
-            if (currentLiveNews?.PinnedPosts.Count > 0)
+            if (currentLiveNews?.Data == null || currentLiveNews.Data.Count == 0)
             {
-                allItems.AddRange(currentLiveNews.PinnedPosts);
+                return "No live news available";
             }
 
-            if (currentLiveNews?.Data.Count > 0)
+            foreach (var item in currentLiveNews.Data)
             {
-                allItems.AddRange(currentLiveNews.Data);
-            }
-
-            if (allItems.Count == 0)
-            {
-                sb.AppendLine("No live news available");
-                return sb.ToString();
-            }
-
-            foreach (var item in allItems)
-            {
-                sb.AppendLine($"▼ {item.Source}");
+                sb.AppendLine($"[{item.Source}]  {item.Time:yyyy-MM-dd HH:mm:ss}");
                 sb.AppendLine(item.Title);
-                sb.AppendLine();
 
                 if (!string.IsNullOrWhiteSpace(item.Body))
                 {
-                    sb.AppendLine(item.Body);
                     sb.AppendLine();
+                    sb.AppendLine(item.Body);
                 }
 
-                sb.AppendLine($"  {item.Time:yyyy-MM-dd HH:mm:ss}");
-                sb.AppendLine(new string('═', 40));
+                sb.AppendLine();
+                sb.AppendLine(new string('═', 50));
                 sb.AppendLine();
             }
 

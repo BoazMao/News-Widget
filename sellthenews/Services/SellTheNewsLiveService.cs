@@ -47,7 +47,7 @@ namespace sellthenews.Services
             }
             catch
             {
-                return cachedResponse;
+                return new SellTheNewsLiveResponse();
             }
         }
 
