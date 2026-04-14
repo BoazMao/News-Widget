@@ -401,7 +401,7 @@ namespace sellthenews
 
             // Live News refresh timer
             liveRefreshTimer = new FormsTimer();
-            liveRefreshTimer.Interval = 5000; // 5 seconds
+            liveRefreshTimer.Interval = 45000; // 5 seconds
             liveRefreshTimer.Tick += async (s, e) => await RefreshLiveNews();
             liveRefreshTimer.Start();
 
