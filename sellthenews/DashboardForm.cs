@@ -17,34 +17,41 @@ namespace sellthenews
         private readonly HttpClient client = new HttpClient();
         private readonly SellTheNewsService sellTheNewsService;
         private readonly FinancialJuiceService financialJuiceService;
+        private readonly SellTheNewsLiveService sellTheNewsLiveService;
 
         // UI Controls
         private Button closeButton;
         private Button refreshButton;
         private Panel tabButtonPanel;
-        private Button overviewTab;
         private Button sellTheNewsTab;
         private Button financialJuiceTab;
+        private Button liveNewsTab;
 
-        private Panel overviewPanel;
         private Panel sellTheNewsPanel;
         private Panel financialJuicePanel;
+        private Panel liveNewsPanel;
 
         // Content controls for each panel
-        private Label overviewTitleLabel;
-        private Label overviewUpdatedLabel;
-        private RichTextBox overviewContentBox;
         private ListBox financialJuiceListBox;
 
         private RichTextBox stnFullContentBox;
         private Label stnTitleLabel;
         private Label stnUpdatedLabel;
 
+        private RichTextBox liveNewsContentBox;
+        private Label liveNewsTitleLabel;
+        private Label liveNewsStatusLabel;
+
         // State
         private FormsTimer stnRefreshTimer;
         private FormsTimer fjRefreshTimer;
+        private FormsTimer liveRefreshTimer;
         private SellTheNewsSummary currentSummary;
         private List<FinancialJuiceHeadline> currentHeadlines;
+        private SellTheNewsLiveResponse currentLiveNews;
+
+        // Live news history cache (for past hour)
+        private List<(SellTheNewsLiveItem item, DateTime fetchedAt)> liveNewsHistory = new List<(SellTheNewsLiveItem, DateTime)>();
 
         private bool dragging = false;
         private Point dragCursorPoint;
@@ -57,8 +64,10 @@ namespace sellthenews
 
             sellTheNewsService = new SellTheNewsService(client);
             financialJuiceService = new FinancialJuiceService(client);
+            sellTheNewsLiveService = new SellTheNewsLiveService(client);
             currentSummary = new SellTheNewsSummary();
             currentHeadlines = new List<FinancialJuiceHeadline>();
+            currentLiveNews = new SellTheNewsLiveResponse();
 
             SetupWindow();
             SetupTabs();
@@ -77,7 +86,7 @@ namespace sellthenews
             ShowInTaskbar = true;
             BackColor = Color.FromArgb(24, 24, 24);
             ForeColor = Color.White;
-            Size = new Size(500, 380);
+            Size = new Size(600, 380); // Increased width to accommodate 4th tab
 
             // Enable DPI awareness for multi-monitor support
             AutoScaleMode = AutoScaleMode.None;
@@ -104,7 +113,7 @@ namespace sellthenews
             {
                 Left = 0,
                 Top = 0,
-                Width = 500,
+                Width = 600, // Updated to match new window width
                 Height = 36,
                 BackColor = Color.FromArgb(15, 15, 15)
             };
@@ -117,10 +126,10 @@ namespace sellthenews
             closeButton = new Button
             {
                 Text = "×",
-                Left = 460,
-                Top = 6,
+                Left = 565,
+                Top = 0,
                 Width = 30,
-                Height = 28,
+                Height = 36,
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(40, 40, 40),
                 ForeColor = Color.White,
@@ -135,10 +144,10 @@ namespace sellthenews
             refreshButton = new Button
             {
                 Text = "↻",
-                Left = 420,
-                Top = 6,
+                Left = 530,
+                Top = 0,
                 Width = 30,
-                Height = 28,
+                Height = 36,
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(40, 40, 40),
                 ForeColor = Color.White,
@@ -150,38 +159,39 @@ namespace sellthenews
                 refreshButton.Enabled = false;
                 _ = RefreshSellTheNews();
                 _ = RefreshFinancialJuice();
+                _ = RefreshLiveNews();
                 await Task.Delay(500);
                 refreshButton.Enabled = true;
             };
             refreshButton.MouseEnter += (s, e) => refreshButton.BackColor = Color.FromArgb(60, 60, 60);
             refreshButton.MouseLeave += (s, e) => refreshButton.BackColor = Color.FromArgb(40, 40, 40);
 
-            overviewTab = CreateTabButton(8, 0, "Overview");
-            overviewTab.Click += (s, e) => ShowTab(0);
+            sellTheNewsTab = CreateTabButton(8, 0, "STN", 95);
+            sellTheNewsTab.Click += (s, e) => ShowTab(0);
 
-            sellTheNewsTab = CreateTabButton(130, 0, "Sell The News");
-            sellTheNewsTab.Click += (s, e) => ShowTab(1);
+            financialJuiceTab = CreateTabButton(107, 0, "FJ", 95);
+            financialJuiceTab.Click += (s, e) => ShowTab(1);
 
-            financialJuiceTab = CreateTabButton(280, 0, "Financial Juice");
-            financialJuiceTab.Click += (s, e) => ShowTab(2);
+            liveNewsTab = CreateTabButton(206, 0, "Live News", 95);
+            liveNewsTab.Click += (s, e) => ShowTab(2);
 
-            tabButtonPanel.Controls.Add(overviewTab);
             tabButtonPanel.Controls.Add(sellTheNewsTab);
             tabButtonPanel.Controls.Add(financialJuiceTab);
+            tabButtonPanel.Controls.Add(liveNewsTab);
             tabButtonPanel.Controls.Add(refreshButton);
             tabButtonPanel.Controls.Add(closeButton);
 
             Controls.Add(tabButtonPanel);
         }
 
-        private Button CreateTabButton(int left, int top, string text)
+        private Button CreateTabButton(int left, int top, string text, int width = 115)
         {
             return new Button
             {
                 Text = text,
                 Left = left,
                 Top = top,
-                Width = 115,
+                Width = width,
                 Height = 28,
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(35, 35, 35),
@@ -193,74 +203,12 @@ namespace sellthenews
 
         private void SetupPanels()
         {
-            // Overview Panel
-            overviewPanel = new Panel
-            {
-                Left = 0,
-                Top = 36,
-                Width = 500,
-                Height = 344,
-                BackColor = Color.FromArgb(24, 24, 24),
-                Visible = false
-            };
-
-            overviewTitleLabel = new Label
-            {
-                Left = 12,
-                Top = 12,
-                Width = 476,
-                Height = 24,
-                Font = new Font("Segoe UI", 11, FontStyle.Bold),
-                ForeColor = Color.RoyalBlue,
-                Text = "Loading..."
-            };
-            overviewTitleLabel.BackColor = Color.Transparent;
-
-            overviewUpdatedLabel = new Label
-            {
-                Left = 12,
-                Top = 38,
-                Width = 476,
-                Height = 16,
-                Font = new Font("Segoe UI", 8, FontStyle.Italic),
-                ForeColor = Color.LightGray,
-                Text = ""
-            };
-            overviewUpdatedLabel.BackColor = Color.Transparent;
-
-            overviewContentBox = new RichTextBox
-            {
-                Left = 12,
-                Top = 60,
-                Width = 476,
-                Height = 270,
-                ReadOnly = true,
-                ScrollBars = RichTextBoxScrollBars.Vertical,
-                BorderStyle = BorderStyle.None,
-                BackColor = Color.FromArgb(24, 24, 24),
-                ForeColor = Color.White,
-                Font = new Font("Segoe UI", 9),
-                TabStop = false
-            };
-
-            // Disable text selection
-            overviewContentBox.MouseDown += (s, e) => { if (e.Button != MouseButtons.Left) return; };
-
-            // Enable dragging through textbox
-            overviewContentBox.MouseDown += Drag_MouseDown;
-            overviewContentBox.MouseMove += Drag_MouseMove;
-            overviewContentBox.MouseUp += Drag_MouseUp;
-
-            overviewPanel.Controls.Add(overviewTitleLabel);
-            overviewPanel.Controls.Add(overviewUpdatedLabel);
-            overviewPanel.Controls.Add(overviewContentBox);
-
             // Sell The News Panel
             sellTheNewsPanel = new Panel
             {
                 Left = 0,
                 Top = 36,
-                Width = 500,
+                Width = 600,
                 Height = 344,
                 BackColor = Color.FromArgb(24, 24, 24),
                 Visible = false
@@ -270,7 +218,7 @@ namespace sellthenews
             {
                 Left = 12,
                 Top = 12,
-                Width = 476,
+                Width = 576,
                 Height = 24,
                 Font = new Font("Segoe UI", 11, FontStyle.Bold),
                 ForeColor = Color.RoyalBlue,
@@ -282,7 +230,7 @@ namespace sellthenews
             {
                 Left = 12,
                 Top = 38,
-                Width = 476,
+                Width = 576,
                 Height = 16,
                 Font = new Font("Segoe UI", 8, FontStyle.Italic),
                 ForeColor = Color.LightGray,
@@ -294,7 +242,7 @@ namespace sellthenews
             {
                 Left = 12,
                 Top = 60,
-                Width = 476,
+                Width = 576,
                 Height = 270,
                 ReadOnly = true,
                 ScrollBars = RichTextBoxScrollBars.Vertical,
@@ -319,7 +267,7 @@ namespace sellthenews
             {
                 Left = 0,
                 Top = 36,
-                Width = 500,
+                Width = 600,
                 Height = 344,
                 BackColor = Color.FromArgb(24, 24, 24),
                 Visible = false
@@ -329,7 +277,7 @@ namespace sellthenews
             {
                 Left = 12,
                 Top = 12,
-                Width = 476,
+                Width = 576,
                 Height = 318,
                 BackColor = Color.FromArgb(24, 24, 24),
                 ForeColor = Color.White,
@@ -346,17 +294,72 @@ namespace sellthenews
 
             financialJuicePanel.Controls.Add(financialJuiceListBox);
 
-            Controls.Add(overviewPanel);
+            // Live News Panel
+            liveNewsPanel = new Panel
+            {
+                Left = 0,
+                Top = 36,
+                Width = 600,
+                Height = 344,
+                BackColor = Color.FromArgb(24, 24, 24),
+                Visible = false
+            };
+
+            liveNewsTitleLabel = new Label
+            {
+                Left = 12,
+                Top = 12,
+                Width = 576,
+                Height = 24,
+                Font = new Font("Segoe UI", 11, FontStyle.Bold),
+                ForeColor = Color.RoyalBlue,
+                Text = "Live News"
+            };
+            liveNewsTitleLabel.BackColor = Color.Transparent;
+
+            liveNewsStatusLabel = new Label
+            {
+                Left = 12,
+                Top = 38,
+                Width = 576,
+                Height = 16,
+                Font = new Font("Segoe UI", 8, FontStyle.Italic),
+                ForeColor = Color.LightGray,
+                Text = "Loading..."
+            };
+            liveNewsStatusLabel.BackColor = Color.Transparent;
+
+            liveNewsContentBox = new RichTextBox
+            {
+                Left = 12,
+                Top = 60,
+                Width = 576,
+                Height = 270,
+                ReadOnly = true,
+                ScrollBars = RichTextBoxScrollBars.Vertical,
+                BorderStyle = BorderStyle.None,
+                BackColor = Color.FromArgb(24, 24, 24),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9),
+                TabStop = false
+            };
+
+            // Enable dragging through live news content box
+            liveNewsContentBox.MouseDown += Drag_MouseDown;
+            liveNewsContentBox.MouseMove += Drag_MouseMove;
+            liveNewsContentBox.MouseUp += Drag_MouseUp;
+
+            liveNewsPanel.Controls.Add(liveNewsTitleLabel);
+            liveNewsPanel.Controls.Add(liveNewsStatusLabel);
+            liveNewsPanel.Controls.Add(liveNewsContentBox);
+
             Controls.Add(sellTheNewsPanel);
             Controls.Add(financialJuicePanel);
+            Controls.Add(liveNewsPanel);
 
             SetStyle(ControlStyles.SupportsTransparentBackColor, true);
 
             // Add drag handlers to all panels for full-window dragging
-            overviewPanel.MouseDown += Drag_MouseDown;
-            overviewPanel.MouseMove += Drag_MouseMove;
-            overviewPanel.MouseUp += Drag_MouseUp;
-
             sellTheNewsPanel.MouseDown += Drag_MouseDown;
             sellTheNewsPanel.MouseMove += Drag_MouseMove;
             sellTheNewsPanel.MouseUp += Drag_MouseUp;
@@ -366,10 +369,6 @@ namespace sellthenews
             financialJuicePanel.MouseUp += Drag_MouseUp;
 
             // Add drag handlers to labels
-            overviewTitleLabel.MouseDown += Drag_MouseDown;
-            overviewTitleLabel.MouseMove += Drag_MouseMove;
-            overviewTitleLabel.MouseUp += Drag_MouseUp;
-
             stnTitleLabel.MouseDown += Drag_MouseDown;
             stnTitleLabel.MouseMove += Drag_MouseMove;
             stnTitleLabel.MouseUp += Drag_MouseUp;
@@ -379,14 +378,14 @@ namespace sellthenews
         {
             currentTabIndex = tabIndex;
 
-            overviewPanel.Visible = (tabIndex == 0);
-            sellTheNewsPanel.Visible = (tabIndex == 1);
-            financialJuicePanel.Visible = (tabIndex == 2);
+            sellTheNewsPanel.Visible = (tabIndex == 0);
+            financialJuicePanel.Visible = (tabIndex == 1);
+            liveNewsPanel.Visible = (tabIndex == 2);
 
             // Update tab button styling
-            overviewTab.BackColor = (tabIndex == 0) ? Color.FromArgb(50, 50, 50) : Color.FromArgb(35, 35, 35);
-            sellTheNewsTab.BackColor = (tabIndex == 1) ? Color.FromArgb(50, 50, 50) : Color.FromArgb(35, 35, 35);
-            financialJuiceTab.BackColor = (tabIndex == 2) ? Color.FromArgb(50, 50, 50) : Color.FromArgb(35, 35, 35);
+            sellTheNewsTab.BackColor = (tabIndex == 0) ? Color.FromArgb(50, 50, 50) : Color.FromArgb(35, 35, 35);
+            financialJuiceTab.BackColor = (tabIndex == 1) ? Color.FromArgb(50, 50, 50) : Color.FromArgb(35, 35, 35);
+            liveNewsTab.BackColor = (tabIndex == 2) ? Color.FromArgb(50, 50, 50) : Color.FromArgb(35, 35, 35);
         }
 
         private void SetupTimers()
@@ -403,9 +402,16 @@ namespace sellthenews
             fjRefreshTimer.Tick += async (s, e) => await RefreshFinancialJuice();
             fjRefreshTimer.Start();
 
+            // Live News refresh timer (45 seconds - same as Financial Juice with ETag caching for efficiency)
+            liveRefreshTimer = new FormsTimer();
+            liveRefreshTimer.Interval = 45000; // 45 seconds
+            liveRefreshTimer.Tick += async (s, e) => await RefreshLiveNews();
+            liveRefreshTimer.Start();
+
             // Initial load
             _ = RefreshSellTheNews();
             _ = RefreshFinancialJuice();
+            _ = RefreshLiveNews();
         }
 
         private async Task RefreshSellTheNews()
@@ -419,13 +425,6 @@ namespace sellthenews
 
                 string formattedText = sellTheNewsService.GetFullReport(currentSummary.Markdown);
                 SetRichTextBoxWithFormatting(stnFullContentBox, formattedText);
-
-                // Update overview as well
-                overviewTitleLabel.Text = "每日分析报告";
-                overviewUpdatedLabel.Text = $"Updated: {currentSummary.UpdatedAt:yyyy-MM-dd HH:mm:ss}";
-
-                // Show STN content + FJ headlines in overview
-                UpdateOverviewDisplay();
             }
             catch (Exception ex)
             {
@@ -441,9 +440,6 @@ namespace sellthenews
             {
                 currentHeadlines = await financialJuiceService.FetchLatestHeadlinesAsync();
                 UpdateFinancialJuiceDisplay();
-
-                // Also update the overview panel
-                UpdateOverviewDisplay();
             }
             catch (Exception ex)
             {
@@ -451,6 +447,135 @@ namespace sellthenews
                 financialJuiceListBox.Items.Add("Error loading Financial Juice:");
                 financialJuiceListBox.Items.Add(ex.Message);
             }
+        }
+
+        private async Task RefreshLiveNews()
+        {
+            try
+            {
+                var liveResponse = await sellTheNewsLiveService.FetchLiveNewsAsync();
+
+                // null means 304 Not Modified - use cached items from past hour
+                if (liveResponse == null)
+                {
+                    System.Diagnostics.Debug.WriteLine("RefreshLiveNews: Got 304, showing cached items");
+                    // Still update display with cached items from history
+                    UpdateLiveNewsDisplay();
+                    liveNewsStatusLabel.Text = $"Updated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}";
+                    return;
+                }
+
+                System.Diagnostics.Debug.WriteLine($"RefreshLiveNews: Got {liveResponse.Data.Count} items, {liveResponse.PinnedPosts.Count} pinned");
+
+                currentLiveNews = liveResponse;
+
+                // Add new items to history cache
+                foreach (var item in liveResponse.Data)
+                {
+                    liveNewsHistory.Add((item, DateTime.Now));
+                }
+                foreach (var pinnedItem in liveResponse.PinnedPosts)
+                {
+                    liveNewsHistory.Add((pinnedItem, DateTime.Now));
+                }
+
+                // Clean up old items (older than 1 hour)
+                var oneHourAgo = DateTime.Now.AddHours(-1);
+                liveNewsHistory.RemoveAll(x => x.fetchedAt < oneHourAgo);
+
+                System.Diagnostics.Debug.WriteLine($"RefreshLiveNews: History cache now has {liveNewsHistory.Count} items");
+
+                UpdateLiveNewsDisplay();
+                liveNewsStatusLabel.Text = $"Updated: {DateTime.Now:yyyy-MM-dd HH:mm:ss}";
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"RefreshLiveNews exception: {ex}");
+                liveNewsStatusLabel.Text = $"Error: {ex.Message}";
+            }
+        }
+
+        private void UpdateLiveNewsDisplay()
+        {
+            SetRichTextBoxWithFormatting(liveNewsContentBox, FormatLiveNewsContent(), scrollToTop: false);
+        }
+
+        private string FormatLiveNewsContent()
+        {
+            var sb = new StringBuilder();
+
+            // Collect all items: pinned posts first, then regular data, then history
+            var allItems = new List<SellTheNewsLiveItem>();
+            var seenIds = new HashSet<string>();
+
+            // Add pinned posts
+            if (currentLiveNews?.PinnedPosts.Count > 0)
+            {
+                foreach (var post in currentLiveNews.PinnedPosts)
+                {
+                    if (!string.IsNullOrEmpty(post.Id))
+                        seenIds.Add(post.Id);
+                    allItems.Add(post);
+                }
+            }
+
+            // Add regular news items
+            if (currentLiveNews?.Data.Count > 0)
+            {
+                foreach (var item in currentLiveNews.Data)
+                {
+                    if (!string.IsNullOrEmpty(item.Id))
+                        seenIds.Add(item.Id);
+                    allItems.Add(item);
+                }
+            }
+
+            // Add cached history items (avoid duplicates)
+            foreach (var (histItem, _) in liveNewsHistory)
+            {
+                if (histItem != null && (string.IsNullOrEmpty(histItem.Id) || !seenIds.Contains(histItem.Id)))
+                {
+                    allItems.Add(histItem);
+                    if (!string.IsNullOrEmpty(histItem.Id))
+                        seenIds.Add(histItem.Id);
+                }
+            }
+
+            // Debug: Log collection counts
+            System.Diagnostics.Debug.WriteLine($"FormatLiveNewsContent: currentLiveNews.Data={currentLiveNews?.Data.Count ?? 0}, history={liveNewsHistory.Count}, total items={allItems.Count}");
+            if (allItems.Count > 0)
+            {
+                System.Diagnostics.Debug.WriteLine($"FormatLiveNewsContent: First item title: {allItems[0].Title}, source: {allItems[0].SourceLabel}");
+            }
+
+            // If no items at all, show placeholder
+            if (allItems.Count == 0)
+            {
+                sb.AppendLine("No live news available");
+                return sb.ToString();
+            }
+
+            // Format each item: title, body, source, timestamp
+            foreach (var item in allItems)
+            {
+                sb.AppendLine($"[{item.SourceLabel}]");
+                sb.AppendLine(item.Title);
+                sb.AppendLine();
+
+                if (!string.IsNullOrWhiteSpace(item.BodyHtml))
+                {
+                    // Strip HTML tags
+                    string bodyText = System.Text.RegularExpressions.Regex.Replace(item.BodyHtml, "<[^>]*>", "");
+                    sb.AppendLine(bodyText);
+                    sb.AppendLine();
+                }
+
+                sb.AppendLine($"  {item.Time:yyyy-MM-dd HH:mm:ss}");
+                sb.AppendLine(new string('═', 40));
+                sb.AppendLine();
+            }
+
+            return sb.ToString();
         }
 
         private void UpdateFinancialJuiceDisplay()
@@ -478,38 +603,6 @@ namespace sellthenews
             }
         }
 
-        private void UpdateOverviewDisplay()
-        {
-            var overviewText = new StringBuilder();
-
-            // Add Sell The News section - FULL Section 1 content
-            var stnContent = sellTheNewsService.ExtractMainSection(currentSummary.Markdown);
-            overviewText.AppendLine("=== SELL THE NEWS ===");
-            overviewText.AppendLine(stnContent);
-            overviewText.AppendLine();
-
-            // Add Financial Juice section
-            overviewText.AppendLine("=== FINANCIAL JUICE ===");
-            if (currentHeadlines.Count == 0)
-            {
-                overviewText.AppendLine("No headlines available");
-            }
-            else
-            {
-                int headlineCount = Math.Min(5, currentHeadlines.Count);
-                for (int i = 0; i < headlineCount; i++)
-                {
-                    var headline = currentHeadlines[i];
-                    overviewText.AppendLine($"• {headline.Title}");
-                    if (!string.IsNullOrWhiteSpace(headline.Summary))
-                        overviewText.AppendLine($"  {ShortenContent(headline.Summary, 100)}");
-                    overviewText.AppendLine();
-                }
-            }
-
-            SetRichTextBoxWithFormatting(overviewContentBox, overviewText.ToString());
-        }
-
         private string ShortenContent(string text, int maxLength)
         {
             if (string.IsNullOrWhiteSpace(text))
@@ -521,11 +614,16 @@ namespace sellthenews
             return text.Substring(0, maxLength).TrimEnd() + "...";
         }
 
-        private void SetRichTextBoxWithFormatting(RichTextBox rtb, string text)
+        private void SetRichTextBoxWithFormatting(RichTextBox rtb, string text, bool scrollToTop = true)
         {
             rtb.Clear();
             if (string.IsNullOrWhiteSpace(text))
+            {
+                System.Diagnostics.Debug.WriteLine($"SetRichTextBoxWithFormatting: Text is null/whitespace!");
                 return;
+            }
+
+            System.Diagnostics.Debug.WriteLine($"SetRichTextBoxWithFormatting: Text length={text.Length}, first 100 chars: {text.Substring(0, Math.Min(100, text.Length))}");
 
             var lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
 
@@ -569,9 +667,18 @@ namespace sellthenews
                 }
             }
 
-            // Set scroll to top
-            rtb.Select(0, 0);
-            rtb.ScrollToCaret();
+            // Handle scroll behavior
+            if (scrollToTop)
+            {
+                // Scroll to top for most tabs
+                rtb.Select(0, 0);
+                rtb.ScrollToCaret();
+            }
+            else
+            {
+                // For live news: don't scroll, let user stay where they are
+                // Content updates in the background
+            }
         }
 
         private void ProcessLineWithFormatting(RichTextBox rtb, string line)
