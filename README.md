@@ -18,3 +18,8 @@ The application aggregates data from multiple sources:
 - ✅ **Full Report Display** - Complete multi-section reports with professional formatting
 - ✅ **Real-Time Refresh** - Automatic timers + manual refresh button
 - ✅ **Error Resilience** - One feed failing doesn't break the other
+
+## Known Issues
+---
+- Live News timestamp display incorrectly
+- FinancialJuice API key error
