@@ -1,16 +1,11 @@
 ## 📊 Overview
 
----
-
 News Widget is a lightweight Windows desktop application that displays real-time financial market analysis and news feeds. It provides traders with a minimal, always-on-top widget for quick market insights.
 
 The application aggregates data from multiple sources:
 - **Sell The News:** AI reports with multi-section analysis and real time news updates
 - **FinancialJuice:** Financial news headlines and market updates
 
-## ✨ Features
-
----
 
 ### Core Functionality
 
@@ -20,11 +15,11 @@ The application aggregates data from multiple sources:
 - ✅ **Error Resilience** - One feed failing doesn't break the other
 
 ## Known Issues
----
+
 - Live News timestamp display incorrectly
 - FinancialJuice API key error
 
 ## Future Direction
----
+
 - New data sources
 - UI rework
