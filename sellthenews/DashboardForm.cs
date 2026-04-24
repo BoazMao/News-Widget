@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using System.Drawing.Drawing2D;
+using System.Reflection;
 using System.Windows.Forms;
 using FormsTimer = System.Windows.Forms.Timer;
 using sellthenews.Models;
@@ -62,10 +63,12 @@ namespace sellthenews
         private bool resizing = false;
         private Point resizeStartCursor;
         private Size resizeStartSize;
+        private Size roundedRegionSize = Size.Empty;
 
         public DashboardForm()
         {
             InitializeComponent();
+            ConfigureDoubleBuffering();
 
             sellTheNewsService = new SellTheNewsService(client);
             financialJuiceService = new FinancialJuiceService(client);
@@ -112,6 +115,17 @@ namespace sellthenews
             // Validate position on each move to keep window on screen
             LocationChanged += ValidateWindowPosition;
             SizeChanged += (s, e) => UpdateLayoutForSize();
+        }
+
+        private void ConfigureDoubleBuffering()
+        {
+            SetStyle(
+                ControlStyles.AllPaintingInWmPaint |
+                ControlStyles.UserPaint |
+                ControlStyles.OptimizedDoubleBuffer |
+                ControlStyles.ResizeRedraw,
+                true);
+            UpdateStyles();
         }
 
         private void SetupTabs()
@@ -249,8 +263,8 @@ namespace sellthenews
             {
                 Name = "stnChineseButton",
                 Text = "中文",
-                Width = 72,
-                Height = 24,
+                Width = 86,
+                Height = 28,
                 FlatStyle = FlatStyle.Flat,
                 Font = new Font("Segoe UI", 9, FontStyle.Bold),
                 TabStop = false
@@ -270,8 +284,8 @@ namespace sellthenews
             {
                 Name = "stnEnglishButton",
                 Text = "English",
-                Width = 72,
-                Height = 24,
+                Width = 86,
+                Height = 28,
                 FlatStyle = FlatStyle.Flat,
                 Font = new Font("Segoe UI", 9, FontStyle.Bold),
                 TabStop = false
@@ -313,6 +327,7 @@ namespace sellthenews
             sellTheNewsPanel.Controls.Add(stnEnglishButton);
             sellTheNewsPanel.Controls.Add(stnFullContentBox);
             UpdateStnLanguageButtonStyles();
+            TryEnableDoubleBuffer(sellTheNewsPanel);
 
             // Financial Juice Panel
             financialJuicePanel = new Panel
@@ -345,6 +360,7 @@ namespace sellthenews
             financialJuiceListBox.MouseUp += Drag_MouseUp;
 
             financialJuicePanel.Controls.Add(financialJuiceListBox);
+            TryEnableDoubleBuffer(financialJuicePanel);
 
             // Live News Panel
             liveNewsPanel = new Panel
@@ -404,6 +420,7 @@ namespace sellthenews
             liveNewsPanel.Controls.Add(liveNewsTitleLabel);
             liveNewsPanel.Controls.Add(liveNewsStatusLabel);
             liveNewsPanel.Controls.Add(liveNewsContentBox);
+            TryEnableDoubleBuffer(liveNewsPanel);
 
             Controls.Add(sellTheNewsPanel);
             Controls.Add(financialJuicePanel);
@@ -493,9 +510,12 @@ namespace sellthenews
             {
                 currentSummary = await sellTheNewsService.FetchLatestSummaryAsync(currentStnLanguage);
 
-                stnTitleLabel.Text = !string.IsNullOrWhiteSpace(currentSummary.Title)
-                    ? currentSummary.Title
-                    : (currentStnLanguage == "zh" ? "每日分析报告" : "Daily Analysis Report");
+                string fixedTitle = currentStnLanguage == "zh"
+                    ? "每日分析报告"
+                    : "Daily Analysis Report";
+                stnTitleLabel.Text = string.IsNullOrWhiteSpace(currentSummary.AnalysisLabel)
+                    ? fixedTitle
+                    : $"{fixedTitle} | {currentSummary.AnalysisLabel}";
                 stnUpdatedLabel.Text = $"Updated: {currentSummary.UpdatedAt:yyyy-MM-dd HH:mm:ss}";
 
                 string formattedText = sellTheNewsService.GetFullReport(currentSummary.Markdown);
@@ -725,12 +745,6 @@ namespace sellthenews
 
         private void SetupStyling()
         {
-            this.Paint += (s, e) =>
-            {
-                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                ApplyRoundedRegion();
-            };
-
             this.Opacity = 0.92;
         }
 
@@ -757,6 +771,7 @@ namespace sellthenews
 
         private void UpdateLayoutForSize()
         {
+            SuspendLayout();
             if (tabButtonPanel != null)
             {
                 tabButtonPanel.Width = Width;
@@ -807,7 +822,11 @@ namespace sellthenews
 
             if (stnTitleLabel != null)
             {
-                int rightReservedWidth = 160;
+                int rightReservedWidth = 20;
+                if (stnEnglishButton != null && stnChineseButton != null)
+                {
+                    rightReservedWidth += stnEnglishButton.Width + stnChineseButton.Width + 18;
+                }
                 stnTitleLabel.Left = 12;
                 stnTitleLabel.Top = 12;
                 stnTitleLabel.Width = Math.Max(80, contentWidth - rightReservedWidth);
@@ -815,7 +834,11 @@ namespace sellthenews
 
             if (stnUpdatedLabel != null)
             {
-                int rightReservedWidth = 160;
+                int rightReservedWidth = 20;
+                if (stnEnglishButton != null && stnChineseButton != null)
+                {
+                    rightReservedWidth += stnEnglishButton.Width + stnChineseButton.Width + 18;
+                }
                 stnUpdatedLabel.Left = 12;
                 stnUpdatedLabel.Top = 38;
                 stnUpdatedLabel.Width = Math.Max(80, contentWidth - rightReservedWidth);
@@ -825,10 +848,10 @@ namespace sellthenews
             {
                 int spacing = 6;
                 stnEnglishButton.Left = Width - 12 - stnEnglishButton.Width;
-                stnEnglishButton.Top = 10;
+                stnEnglishButton.Top = 8;
 
                 stnChineseButton.Left = stnEnglishButton.Left - spacing - stnChineseButton.Width;
-                stnChineseButton.Top = 10;
+                stnChineseButton.Top = 8;
             }
 
             if (stnFullContentBox != null)
@@ -872,13 +895,13 @@ namespace sellthenews
                 resizeGripPanel.BringToFront();
             }
 
+            ResumeLayout(true);
             ApplyRoundedRegion();
-            Invalidate();
         }
 
         private void ApplyRoundedRegion()
         {
-            if (Width <= 0 || Height <= 0)
+            if (Width <= 0 || Height <= 0 || roundedRegionSize == Size)
             {
                 return;
             }
@@ -891,6 +914,7 @@ namespace sellthenews
             gp.AddArc(new Rectangle(0, Height - radius - 1, radius, radius), 90, 90);
             gp.CloseFigure();
             Region = new Region(gp);
+            roundedRegionSize = Size;
         }
 
         private void Drag_MouseDown(object sender, MouseEventArgs e)
@@ -992,7 +1016,6 @@ namespace sellthenews
             int newHeight = Math.Max(MinimumSize.Height, resizeStartSize.Height + deltaY);
 
             Size = new Size(newWidth, newHeight);
-            UpdateLayoutForSize();
         }
 
         private void ResizeGrip_MouseUp(object sender, MouseEventArgs e)
@@ -1004,6 +1027,15 @@ namespace sellthenews
         {
             if (e.KeyCode == Keys.Escape)
                 Close();
+        }
+
+        private void TryEnableDoubleBuffer(Control control)
+        {
+            if (control == null)
+                return;
+
+            PropertyInfo propertyInfo = typeof(Control).GetProperty("DoubleBuffered", BindingFlags.NonPublic | BindingFlags.Instance);
+            propertyInfo?.SetValue(control, true, null);
         }
     }
 }
