@@ -1,9 +1,10 @@
+using sellthenews.Models;
 using System;
+using System.Globalization;
 using System.Net.Http;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using sellthenews.Models;
 
 namespace sellthenews.Services
 {
@@ -133,8 +134,36 @@ namespace sellthenews.Services
             if (element.TryGetProperty("time", out var timeElement))
             {
                 string timeText = timeElement.GetString() ?? "";
-                if (DateTime.TryParse(timeText, out var parsed))
-                    return parsed;
+
+                if (!string.IsNullOrWhiteSpace(timeText))
+                {
+                    string normalized = timeText.Trim();
+
+                    // STN returns values like: 2026-04-13 19:27:31 ET
+                    if (normalized.EndsWith(" ET", StringComparison.OrdinalIgnoreCase))
+                    {
+                        normalized = normalized.Substring(0, normalized.Length - 3).Trim();
+                    }
+
+                    if (DateTime.TryParseExact(
+                        normalized,
+                        "yyyy-MM-dd HH:mm:ss",
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.None,
+                        out var exactParsed))
+                    {
+                        return exactParsed;
+                    }
+
+                    if (DateTime.TryParse(
+                        normalized,
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.None,
+                        out var fallbackParsed))
+                    {
+                        return fallbackParsed;
+                    }
+                }
             }
 
             return DateTime.Now;
