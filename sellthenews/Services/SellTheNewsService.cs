@@ -15,13 +15,19 @@ namespace sellthenews.Services
             client = httpClient ?? new HttpClient();
         }
 
-        public async Task<SellTheNewsSummary> FetchLatestSummaryAsync()
+        public async Task<SellTheNewsSummary> FetchLatestSummaryAsync(string language = "zh")
         {
             var summary = new SellTheNewsSummary();
 
             try
             {
-                string url = "https://sellthenews.org/api/wsb/latest?lang=zh";
+                string normalizedLanguage = (language ?? "zh").Trim().ToLowerInvariant();
+                if (normalizedLanguage != "zh" && normalizedLanguage != "en")
+                {
+                    normalizedLanguage = "zh";
+                }
+
+                string url = $"https://sellthenews.org/api/wsb/latest?lang={normalizedLanguage}";
                 string json = await client.GetStringAsync(url);
 
                 using JsonDocument doc = JsonDocument.Parse(json);
