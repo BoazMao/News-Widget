@@ -54,6 +54,11 @@ namespace sellthenews
         private Point dragCursorPoint;
         private Point dragFormPoint;
         private int currentTabIndex = 0;
+        private const int ResizeGripSize = 16;
+        private Panel resizeGripPanel;
+        private bool resizing = false;
+        private Point resizeStartCursor;
+        private Size resizeStartSize;
 
         public DashboardForm()
         {
@@ -84,6 +89,7 @@ namespace sellthenews
             BackColor = Color.FromArgb(24, 24, 24);
             ForeColor = Color.White;
             Size = new Size(600, 380); // Increased width to accommodate 4th tab
+            MinimumSize = new Size(460, 300);
 
             // Enable DPI awareness for multi-monitor support
             AutoScaleMode = AutoScaleMode.None;
@@ -102,6 +108,7 @@ namespace sellthenews
 
             // Validate position on each move to keep window on screen
             LocationChanged += ValidateWindowPosition;
+            SizeChanged += (s, e) => UpdateLayoutForSize();
         }
 
         private void SetupTabs()
@@ -353,6 +360,7 @@ namespace sellthenews
             Controls.Add(sellTheNewsPanel);
             Controls.Add(financialJuicePanel);
             Controls.Add(liveNewsPanel);
+            CreateResizeGrip();
 
             SetStyle(ControlStyles.SupportsTransparentBackColor, true);
 
@@ -369,6 +377,26 @@ namespace sellthenews
             stnTitleLabel.MouseDown += Drag_MouseDown;
             stnTitleLabel.MouseMove += Drag_MouseMove;
             stnTitleLabel.MouseUp += Drag_MouseUp;
+
+            UpdateLayoutForSize();
+        }
+
+        private void CreateResizeGrip()
+        {
+            resizeGripPanel = new Panel
+            {
+                Width = ResizeGripSize,
+                Height = ResizeGripSize,
+                BackColor = Color.FromArgb(70, 70, 70),
+                Cursor = Cursors.SizeNWSE
+            };
+
+            resizeGripPanel.MouseDown += ResizeGrip_MouseDown;
+            resizeGripPanel.MouseMove += ResizeGrip_MouseMove;
+            resizeGripPanel.MouseUp += ResizeGrip_MouseUp;
+
+            Controls.Add(resizeGripPanel);
+            resizeGripPanel.BringToFront();
         }
 
         private void ShowTab(int tabIndex)
@@ -650,17 +678,132 @@ namespace sellthenews
             this.Paint += (s, e) =>
             {
                 e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                using var gp = new GraphicsPath();
-                int radius = 12;
-                gp.AddArc(new Rectangle(0, 0, radius, radius), 180, 90);
-                gp.AddArc(new Rectangle(Width - radius - 1, 0, radius, radius), 270, 90);
-                gp.AddArc(new Rectangle(Width - radius - 1, Height - radius - 1, radius, radius), 0, 90);
-                gp.AddArc(new Rectangle(0, Height - radius - 1, radius, radius), 90, 90);
-                gp.CloseFigure();
-                this.Region = new Region(gp);
+                ApplyRoundedRegion();
             };
 
             this.Opacity = 0.92;
+        }
+
+        private void UpdateLayoutForSize()
+        {
+            if (tabButtonPanel != null)
+            {
+                tabButtonPanel.Width = Width;
+            }
+
+            if (closeButton != null)
+            {
+                closeButton.Left = Width - closeButton.Width - 5;
+            }
+
+            if (refreshButton != null && closeButton != null)
+            {
+                refreshButton.Left = closeButton.Left - refreshButton.Width - 5;
+            }
+
+            int contentPanelTop = 36;
+            int contentPanelWidth = Math.Max(0, Width);
+            int contentPanelHeight = Math.Max(0, Height - contentPanelTop);
+
+            if (sellTheNewsPanel != null)
+            {
+                sellTheNewsPanel.Left = 0;
+                sellTheNewsPanel.Top = contentPanelTop;
+                sellTheNewsPanel.Width = contentPanelWidth;
+                sellTheNewsPanel.Height = contentPanelHeight;
+            }
+
+            if (financialJuicePanel != null)
+            {
+                financialJuicePanel.Left = 0;
+                financialJuicePanel.Top = contentPanelTop;
+                financialJuicePanel.Width = contentPanelWidth;
+                financialJuicePanel.Height = contentPanelHeight;
+            }
+
+            if (liveNewsPanel != null)
+            {
+                liveNewsPanel.Left = 0;
+                liveNewsPanel.Top = contentPanelTop;
+                liveNewsPanel.Width = contentPanelWidth;
+                liveNewsPanel.Height = contentPanelHeight;
+            }
+
+            int contentLeft = 12;
+            int contentTop = 60;
+            int contentWidth = Math.Max(80, Width - 24);
+            int contentHeight = Math.Max(80, Height - contentTop - 14);
+
+            if (stnTitleLabel != null)
+            {
+                stnTitleLabel.Width = contentWidth;
+            }
+
+            if (stnUpdatedLabel != null)
+            {
+                stnUpdatedLabel.Width = contentWidth;
+            }
+
+            if (stnFullContentBox != null)
+            {
+                stnFullContentBox.Left = contentLeft;
+                stnFullContentBox.Top = contentTop;
+                stnFullContentBox.Width = contentWidth;
+                stnFullContentBox.Height = contentHeight;
+            }
+
+            if (financialJuiceListBox != null)
+            {
+                financialJuiceListBox.Left = 12;
+                financialJuiceListBox.Top = 12;
+                financialJuiceListBox.Width = Math.Max(80, Width - 24);
+                financialJuiceListBox.Height = Math.Max(80, Height - 36 - 14);
+            }
+
+            if (liveNewsTitleLabel != null)
+            {
+                liveNewsTitleLabel.Width = contentWidth;
+            }
+
+            if (liveNewsStatusLabel != null)
+            {
+                liveNewsStatusLabel.Width = contentWidth;
+            }
+
+            if (liveNewsContentBox != null)
+            {
+                liveNewsContentBox.Left = contentLeft;
+                liveNewsContentBox.Top = contentTop;
+                liveNewsContentBox.Width = contentWidth;
+                liveNewsContentBox.Height = contentHeight;
+            }
+
+            if (resizeGripPanel != null)
+            {
+                resizeGripPanel.Left = Width - resizeGripPanel.Width;
+                resizeGripPanel.Top = Height - resizeGripPanel.Height;
+                resizeGripPanel.BringToFront();
+            }
+
+            ApplyRoundedRegion();
+            Invalidate();
+        }
+
+        private void ApplyRoundedRegion()
+        {
+            if (Width <= 0 || Height <= 0)
+            {
+                return;
+            }
+
+            using var gp = new GraphicsPath();
+            int radius = 12;
+            gp.AddArc(new Rectangle(0, 0, radius, radius), 180, 90);
+            gp.AddArc(new Rectangle(Width - radius - 1, 0, radius, radius), 270, 90);
+            gp.AddArc(new Rectangle(Width - radius - 1, Height - radius - 1, radius, radius), 0, 90);
+            gp.AddArc(new Rectangle(0, Height - radius - 1, radius, radius), 90, 90);
+            gp.CloseFigure();
+            Region = new Region(gp);
         }
 
         private void Drag_MouseDown(object sender, MouseEventArgs e)
@@ -679,7 +822,7 @@ namespace sellthenews
 
         private void Drag_MouseMove(object sender, MouseEventArgs e)
         {
-            if (dragging)
+            if (dragging && !resizing)
             {
                 Point currentCursorPos = Cursor.Position;
 
@@ -733,6 +876,41 @@ namespace sellthenews
         private void Drag_MouseUp(object sender, MouseEventArgs e)
         {
             dragging = false;
+        }
+
+        private void ResizeGrip_MouseDown(object sender, MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Left)
+            {
+                return;
+            }
+
+            resizing = true;
+            resizeStartCursor = Cursor.Position;
+            resizeStartSize = Size;
+        }
+
+        private void ResizeGrip_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (!resizing)
+            {
+                return;
+            }
+
+            Point currentCursor = Cursor.Position;
+            int deltaX = currentCursor.X - resizeStartCursor.X;
+            int deltaY = currentCursor.Y - resizeStartCursor.Y;
+
+            int newWidth = Math.Max(MinimumSize.Width, resizeStartSize.Width + deltaX);
+            int newHeight = Math.Max(MinimumSize.Height, resizeStartSize.Height + deltaY);
+
+            Size = new Size(newWidth, newHeight);
+            UpdateLayoutForSize();
+        }
+
+        private void ResizeGrip_MouseUp(object sender, MouseEventArgs e)
+        {
+            resizing = false;
         }
 
         private void DashboardForm_KeyDown(object sender, KeyEventArgs e)
