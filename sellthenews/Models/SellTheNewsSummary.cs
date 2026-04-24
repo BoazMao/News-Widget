@@ -5,6 +5,7 @@ namespace sellthenews.Models
     public class SellTheNewsSummary
     {
         public string Title { get; set; }
+        public string AnalysisLabel { get; set; }
         public string Markdown { get; set; }
         public DateTime UpdatedAt { get; set; }
         public string Section { get; set; }
@@ -12,6 +13,7 @@ namespace sellthenews.Models
         public SellTheNewsSummary()
         {
             Title = "No title";
+            AnalysisLabel = "";
             Markdown = "";
             UpdatedAt = DateTime.Now;
             Section = "";

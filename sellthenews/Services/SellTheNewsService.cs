@@ -1,5 +1,6 @@
 using System;
 using System.Net.Http;
+using System.Text.RegularExpressions;
 using System.Text.Json;
 using System.Threading.Tasks;
 using sellthenews.Models;
@@ -8,6 +9,7 @@ namespace sellthenews.Services
 {
     public class SellTheNewsService
     {
+        private static readonly Regex AnalysisLabelRegex = new Regex(@"Analysis\s*#\d+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private readonly HttpClient client;
 
         public SellTheNewsService(HttpClient httpClient = null)
@@ -50,6 +52,11 @@ namespace sellthenews.Services
                 summary.Markdown = payload.TryGetProperty("markdown", out JsonElement m)
                     ? m.GetString() ?? ""
                     : "";
+
+                if (payload.TryGetProperty("html", out JsonElement h))
+                {
+                    summary.AnalysisLabel = ExtractAnalysisLabel(h.GetString());
+                }
             }
             catch (Exception ex)
             {
@@ -58,6 +65,15 @@ namespace sellthenews.Services
             }
 
             return summary;
+        }
+
+        private string ExtractAnalysisLabel(string html)
+        {
+            if (string.IsNullOrWhiteSpace(html))
+                return "";
+
+            Match match = AnalysisLabelRegex.Match(html);
+            return match.Success ? match.Value.Trim() : "";
         }
 
         public string ExtractMainSection(string markdown)
