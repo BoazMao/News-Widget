@@ -37,6 +37,8 @@ namespace sellthenews
         private RichTextBox stnFullContentBox;
         private Label stnTitleLabel;
         private Label stnUpdatedLabel;
+        private Button stnChineseButton;
+        private Button stnEnglishButton;
 
         private RichTextBox liveNewsContentBox;
         private Label liveNewsTitleLabel;
@@ -49,6 +51,7 @@ namespace sellthenews
         private SellTheNewsSummary currentSummary;
         private List<FinancialJuiceHeadline> currentHeadlines;
         private SellTheNewsLiveResponse currentLiveNews;
+        private string currentStnLanguage = "zh";
 
         private bool dragging = false;
         private Point dragCursorPoint;
@@ -222,7 +225,7 @@ namespace sellthenews
             {
                 Left = 12,
                 Top = 12,
-                Width = 576,
+                Width = 420,
                 Height = 24,
                 Font = new Font("Segoe UI", 11, FontStyle.Bold),
                 ForeColor = Color.RoyalBlue,
@@ -234,13 +237,55 @@ namespace sellthenews
             {
                 Left = 12,
                 Top = 38,
-                Width = 576,
+                Width = 420,
                 Height = 16,
                 Font = new Font("Segoe UI", 8, FontStyle.Italic),
                 ForeColor = Color.LightGray,
                 Text = ""
             };
             stnUpdatedLabel.BackColor = Color.Transparent;
+
+            stnChineseButton = new Button
+            {
+                Name = "stnChineseButton",
+                Text = "中文",
+                Width = 72,
+                Height = 24,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                TabStop = false
+            };
+            stnChineseButton.FlatAppearance.BorderSize = 1;
+            stnChineseButton.Click += async (s, e) =>
+            {
+                if (currentStnLanguage == "zh")
+                    return;
+
+                currentStnLanguage = "zh";
+                UpdateStnLanguageButtonStyles();
+                await RefreshSellTheNews();
+            };
+
+            stnEnglishButton = new Button
+            {
+                Name = "stnEnglishButton",
+                Text = "English",
+                Width = 72,
+                Height = 24,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                TabStop = false
+            };
+            stnEnglishButton.FlatAppearance.BorderSize = 1;
+            stnEnglishButton.Click += async (s, e) =>
+            {
+                if (currentStnLanguage == "en")
+                    return;
+
+                currentStnLanguage = "en";
+                UpdateStnLanguageButtonStyles();
+                await RefreshSellTheNews();
+            };
 
             stnFullContentBox = new RichTextBox
             {
@@ -264,7 +309,10 @@ namespace sellthenews
 
             sellTheNewsPanel.Controls.Add(stnTitleLabel);
             sellTheNewsPanel.Controls.Add(stnUpdatedLabel);
+            sellTheNewsPanel.Controls.Add(stnChineseButton);
+            sellTheNewsPanel.Controls.Add(stnEnglishButton);
             sellTheNewsPanel.Controls.Add(stnFullContentBox);
+            UpdateStnLanguageButtonStyles();
 
             // Financial Juice Panel
             financialJuicePanel = new Panel
@@ -443,9 +491,11 @@ namespace sellthenews
         {
             try
             {
-                currentSummary = await sellTheNewsService.FetchLatestSummaryAsync();
+                currentSummary = await sellTheNewsService.FetchLatestSummaryAsync(currentStnLanguage);
 
-                stnTitleLabel.Text = "每日分析报告";
+                stnTitleLabel.Text = !string.IsNullOrWhiteSpace(currentSummary.Title)
+                    ? currentSummary.Title
+                    : (currentStnLanguage == "zh" ? "每日分析报告" : "Daily Analysis Report");
                 stnUpdatedLabel.Text = $"Updated: {currentSummary.UpdatedAt:yyyy-MM-dd HH:mm:ss}";
 
                 string formattedText = sellTheNewsService.GetFullReport(currentSummary.Markdown);
@@ -684,6 +734,27 @@ namespace sellthenews
             this.Opacity = 0.92;
         }
 
+        private void UpdateStnLanguageButtonStyles()
+        {
+            if (stnChineseButton == null || stnEnglishButton == null)
+                return;
+
+            Color activeBackColor = Color.FromArgb(70, 110, 180);
+            Color activeBorderColor = Color.FromArgb(95, 140, 220);
+            Color inactiveBackColor = Color.FromArgb(38, 38, 38);
+            Color inactiveBorderColor = Color.FromArgb(65, 65, 65);
+
+            bool chineseIsActive = currentStnLanguage == "zh";
+
+            stnChineseButton.BackColor = chineseIsActive ? activeBackColor : inactiveBackColor;
+            stnChineseButton.ForeColor = Color.White;
+            stnChineseButton.FlatAppearance.BorderColor = chineseIsActive ? activeBorderColor : inactiveBorderColor;
+
+            stnEnglishButton.BackColor = chineseIsActive ? inactiveBackColor : activeBackColor;
+            stnEnglishButton.ForeColor = Color.White;
+            stnEnglishButton.FlatAppearance.BorderColor = chineseIsActive ? inactiveBorderColor : activeBorderColor;
+        }
+
         private void UpdateLayoutForSize()
         {
             if (tabButtonPanel != null)
@@ -736,12 +807,28 @@ namespace sellthenews
 
             if (stnTitleLabel != null)
             {
-                stnTitleLabel.Width = contentWidth;
+                int rightReservedWidth = 160;
+                stnTitleLabel.Left = 12;
+                stnTitleLabel.Top = 12;
+                stnTitleLabel.Width = Math.Max(80, contentWidth - rightReservedWidth);
             }
 
             if (stnUpdatedLabel != null)
             {
-                stnUpdatedLabel.Width = contentWidth;
+                int rightReservedWidth = 160;
+                stnUpdatedLabel.Left = 12;
+                stnUpdatedLabel.Top = 38;
+                stnUpdatedLabel.Width = Math.Max(80, contentWidth - rightReservedWidth);
+            }
+
+            if (stnEnglishButton != null && stnChineseButton != null)
+            {
+                int spacing = 6;
+                stnEnglishButton.Left = Width - 12 - stnEnglishButton.Width;
+                stnEnglishButton.Top = 10;
+
+                stnChineseButton.Left = stnEnglishButton.Left - spacing - stnChineseButton.Width;
+                stnChineseButton.Top = 10;
             }
 
             if (stnFullContentBox != null)
