@@ -258,6 +258,9 @@ public partial class DashboardForm : Form
         wsbReport.BackColor = Surface;
         wsbReport.ForeColor = Color.FromArgb(226, 232, 240);
         wsbReport.Font = new Font("Segoe UI", 11F);
+        wsbReport.DetectUrls = true;
+        wsbReport.WordWrap = true;
+        wsbReport.ScrollBars = RichTextBoxScrollBars.Vertical;
         wsbReport.Text = "Loading WSB analysis…";
         wsbView.Controls.Add(wsbReport);
     }
@@ -300,8 +303,12 @@ public partial class DashboardForm : Form
         try
         {
             SellTheNewsSummary summary = await wsbService.FetchLatestSummaryAsync(wsbLanguage);
-            string heading = $"{summary.AnalysisLabel}\n{summary.Title}\nUpdated {summary.UpdatedAt:g}\n\n";
-            wsbReport.Text = heading + wsbService.GetFullReport(summary.Markdown);
+            MarkdownRichTextRenderer.Render(
+                wsbReport,
+                summary.Markdown,
+                summary.Title,
+                summary.AnalysisLabel,
+                summary.UpdatedAt);
             if (wsbView.Visible) status.Text = $"WSB updated {DateTime.Now:h:mm tt}";
         }
         finally
