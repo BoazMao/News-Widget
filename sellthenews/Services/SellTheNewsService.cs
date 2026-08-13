@@ -12,7 +12,7 @@ namespace sellthenews.Services
         private static readonly Regex AnalysisLabelRegex = new Regex(@"Analysis\s*#\d+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private readonly HttpClient client;
 
-        public SellTheNewsService(HttpClient httpClient = null)
+        public SellTheNewsService(HttpClient? httpClient = null)
         {
             client = httpClient ?? new HttpClient();
         }
@@ -67,7 +67,7 @@ namespace sellthenews.Services
             return summary;
         }
 
-        private string ExtractAnalysisLabel(string html)
+        private string ExtractAnalysisLabel(string? html)
         {
             if (string.IsNullOrWhiteSpace(html))
                 return "";
@@ -103,7 +103,6 @@ namespace sellthenews.Services
             if (start < 0)
                 return FormatMarkdown(markdown);
 
-            // Extract from "## 1." to the end, capturing all numbered sections
             string fullReport = markdown.Substring(start);
             return FormatMarkdown(fullReport);
         }
@@ -122,7 +121,6 @@ namespace sellthenews.Services
             {
                 string trimmed = line.Trim();
 
-                // Skip empty lines but add spacing intelligently
                 if (string.IsNullOrWhiteSpace(trimmed))
                 {
                     if (!lastWasEmpty && output.Length > 0)
@@ -135,21 +133,17 @@ namespace sellthenews.Services
 
                 lastWasEmpty = false;
 
-                // Detect and format headers (## 1., ## 2., etc.)
                 if (trimmed.StartsWith("##"))
                 {
-                    // Add extra spacing before section headers
                     if (output.Length > 0)
                         output.AppendLine();
 
-                    // Remove markdown symbols but keep the text
                     string headerText = trimmed.Replace("#", "").Trim();
                     output.AppendLine("▼ " + headerText);
                     output.AppendLine(new string('═', Math.Min(50, headerText.Length + 4)));
                     continue;
                 }
 
-                // Detect table rows (contain |)
                 if (trimmed.Contains("|"))
                 {
                     if (!inTable)
@@ -158,23 +152,17 @@ namespace sellthenews.Services
                         inTable = true;
                     }
 
-                    // Keep table structure for RichTextBox formatting
                     output.AppendLine(trimmed);
                     continue;
                 }
 
-                // Exit table mode
-                if (inTable && !trimmed.Contains("|"))
+                if (inTable)
                 {
                     inTable = false;
                     output.AppendLine();
                 }
 
-                // Regular text - preserve markdown formatting symbols for RichTextBox display
-                if (!string.IsNullOrWhiteSpace(trimmed))
-                {
-                    output.AppendLine(trimmed);
-                }
+                output.AppendLine(trimmed);
             }
 
             return output.ToString().Trim();
@@ -185,13 +173,11 @@ namespace sellthenews.Services
             if (string.IsNullOrWhiteSpace(input))
                 return "";
 
-            // For RichTextBox display, preserve markdown formatting symbols
             string text = input.Trim();
 
             if (text.Length <= maxLength)
                 return text;
 
-            // Truncate while preserving markdown formatting for display
             return text.Substring(0, maxLength).TrimEnd() + "...";
         }
     }
