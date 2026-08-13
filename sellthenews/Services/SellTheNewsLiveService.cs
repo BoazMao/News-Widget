@@ -1,4 +1,4 @@
-using sellthenews.Models;
+// RETIRED: The Sell The News live pipeline is intentionally disabled. NewsAPI now owns the News workspace.\n// This file is retained temporarily as reference and is not constructed, timed, refreshed, or displayed.\n\nusing sellthenews.Models;
 using System;
 using System.Globalization;
 using System.Net.Http;
