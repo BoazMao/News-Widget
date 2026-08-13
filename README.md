@@ -1,25 +1,37 @@
-## 📊 Overview
+# News Widget
 
-News Widget is a lightweight Windows desktop application that displays real-time financial market analysis and news feeds. It provides traders with a minimal, always-on-top widget for quick market insights.
+A focused Windows desktop workspace for current headlines and WSB market analysis.
 
-The application aggregates data from multiple sources:
-- **Sell The News:** AI reports with multi-section analysis and real time news updates
-- **FinancialJuice:** Financial news headlines and market updates
+## Workspaces
 
+- **News** — US top headlines from [NewsAPI](https://newsapi.org/) in five native categories: General, Business, Technology, Science, and Health.
+- **WSB** — the latest Sell The News WSB analysis report.
 
-### Core Functionality
+The former Sell The News live pipeline is disabled and retained only as source reference while NewsAPI replaces it.
 
-- ✅ **Multi-Feed Integration** - Two independent data sources with separate refresh cycles
-- ✅ **Full Report Display** - Complete multi-section reports with professional formatting
-- ✅ **Real-Time Refresh** - Automatic timers + manual refresh button
-- ✅ **Error Resilience** - One feed failing doesn't break the other
+## NewsAPI setup
 
-## Known Issues
+1. Create a NewsAPI account and copy your API key.
+2. Launch News Widget and choose **Settings**.
+3. Paste the key and select **Save key**.
 
-- Live News timestamp display incorrectly
-- FinancialJuice API key error
+The key is never stored in this repository or placed in request URLs. It is encrypted with Windows Data Protection for the current Windows user and sent only in the `X-Api-Key` request header. Clearing the field and saving removes the local key.
 
-## Future Direction
+## Behavior
 
-- New data sources
-- UI rework
+- News refreshes every 10 minutes and on demand.
+- WSB refreshes hourly and on demand.
+- Refreshes do not overlap.
+- NewsAPI authentication, rate-limit, timeout, provider, and malformed-response errors are shown without discarding the existing visible headlines.
+- Article URLs are deduplicated, removed records are ignored, and timestamps are converted for local display.
+
+## Development
+
+Requires the .NET 10 SDK on Windows.
+
+```powershell
+dotnet build sellthenews_sol.slnx
+dotnet run --project sellthenews/sellthenews.csproj
+```
+
+No API key is required to compile the application.
