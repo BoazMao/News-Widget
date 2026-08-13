@@ -259,11 +259,12 @@ public partial class DashboardForm : Form
         wsbReport.WebBrowserShortcutsEnabled = true;
         wsbReport.Navigating += (_, args) =>
         {
-            if (args.Url.Scheme is not ("http" or "https"))
+            Uri? destination = args.Url;
+            if (destination is null || destination.Scheme is not ("http" or "https"))
                 return;
 
             args.Cancel = true;
-            Process.Start(new ProcessStartInfo(args.Url.AbsoluteUri) { UseShellExecute = true });
+            Process.Start(new ProcessStartInfo(destination.AbsoluteUri) { UseShellExecute = true });
         };
         wsbReport.DocumentText = "<html><body style='background:#111827;color:#cbd5e1;font-family:Segoe UI;padding:30px'>Loading WSB analysis…</body></html>";
         wsbView.Controls.Add(wsbReport);
