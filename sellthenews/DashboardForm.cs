@@ -35,6 +35,7 @@ public partial class DashboardForm : Form
     private readonly System.Windows.Forms.Timer wsbTimer = new() { Interval = 60 * 60 * 1000 };
 
     private string? apiKey;
+    private string wsbLanguage;
     private NewsCategory selectedCategory = NewsCategory.General;
     private bool newsRefreshInProgress;
     private bool wsbRefreshInProgress;
@@ -45,6 +46,7 @@ public partial class DashboardForm : Form
         newsService = new NewsApiService(httpClient);
         wsbService = new SellTheNewsService(httpClient);
         apiKey = keyStore.Load();
+        wsbLanguage = keyStore.LoadWsbLanguage();
 
         Text = "News Widget";
         MinimumSize = new Size(900, 600);
@@ -81,10 +83,7 @@ public partial class DashboardForm : Form
         Shown += async (_, _) =>
         {
             ShowNews();
-            if (string.IsNullOrWhiteSpace(apiKey))
-                ShowApiKeyPrompt();
-            else
-                await RefreshNewsAsync();
+            await RefreshNewsAsync();
             await RefreshWsbAsync();
         };
     }
@@ -227,7 +226,7 @@ public partial class DashboardForm : Form
         newsCards.Padding = new Padding(0, 0, 8, 0);
         newsCards.SizeChanged += (_, _) => ResizeNewsCards();
 
-        newsEmptyState.Text = "Add your NewsAPI key in Settings to begin.";
+        newsEmptyState.Text = "Loading headlines…";
         newsEmptyState.ForeColor = Muted;
         newsEmptyState.TextAlign = ContentAlignment.MiddleCenter;
         newsEmptyState.Dock = DockStyle.Fill;
@@ -268,13 +267,6 @@ public partial class DashboardForm : Form
         if (newsRefreshInProgress)
             return;
 
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
-            newsEmptyState.Visible = true;
-            status.Text = "NewsAPI key required";
-            return;
-        }
-
         newsRefreshInProgress = true;
         status.Text = $"Loading {selectedCategory}…";
         try
@@ -307,7 +299,7 @@ public partial class DashboardForm : Form
         if (wsbView.Visible) status.Text = "Loading WSB analysis…";
         try
         {
-            SellTheNewsSummary summary = await wsbService.FetchLatestSummaryAsync("en");
+            SellTheNewsSummary summary = await wsbService.FetchLatestSummaryAsync(wsbLanguage);
             string heading = $"{summary.AnalysisLabel}\n{summary.Title}\nUpdated {summary.UpdatedAt:g}\n\n";
             wsbReport.Text = heading + wsbService.GetFullReport(summary.Markdown);
             if (wsbView.Visible) status.Text = $"WSB updated {DateTime.Now:h:mm tt}";
@@ -414,7 +406,7 @@ public partial class DashboardForm : Form
         newsView.BringToFront();
         wsbView.Visible = false;
         SetNavigation(newsTab);
-        status.Text = string.IsNullOrWhiteSpace(apiKey) ? "NewsAPI key required" : "Ready";
+        status.Text = "Ready";
     }
 
     private void ShowWsb()
@@ -429,15 +421,23 @@ public partial class DashboardForm : Form
 
     private void ShowApiKeyPrompt()
     {
-        using var dialog = new ApiKeyDialog(apiKey);
+        using var dialog = new ApiKeyDialog(apiKey, wsbLanguage);
         if (dialog.ShowDialog(this) != DialogResult.OK)
             return;
 
+        string previousLanguage = wsbLanguage;
         apiKey = dialog.ApiKey;
+        wsbLanguage = dialog.WsbLanguage;
         keyStore.Save(apiKey);
-        status.Text = string.IsNullOrWhiteSpace(apiKey) ? "NewsAPI key removed" : "NewsAPI key saved";
-        if (newsView.Visible && !string.IsNullOrWhiteSpace(apiKey))
+        keyStore.SaveWsbLanguage(wsbLanguage);
+        status.Text = string.IsNullOrWhiteSpace(apiKey)
+            ? "Settings saved · anonymous NewsAPI mode"
+            : "Settings saved · NewsAPI key enabled";
+
+        if (newsView.Visible)
             _ = RefreshNewsAsync();
+        if (previousLanguage != wsbLanguage)
+            _ = RefreshWsbAsync();
     }
 
     private void UpdateCategorySelection()

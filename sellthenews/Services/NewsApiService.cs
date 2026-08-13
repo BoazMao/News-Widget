@@ -8,6 +8,7 @@ namespace sellthenews.Services;
 public sealed class NewsApiService
 {
     private static readonly Uri Endpoint = new("https://newsapi.org/v2/top-headlines");
+    private const string ApplicationUserAgent = "NewsWidget/1.0 (+https://github.com/BoazMao/News-Widget)";
     private readonly HttpClient client;
 
     public NewsApiService(HttpClient client)
@@ -17,22 +18,21 @@ public sealed class NewsApiService
     }
 
     public async Task<IReadOnlyList<NewsArticle>> GetTopHeadlinesAsync(
-        string apiKey,
+        string? apiKey,
         NewsCategory category,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(apiKey))
-            throw new NewsApiException("Enter your NewsAPI key in Settings to load headlines.");
-
         var uri = new UriBuilder(Endpoint)
         {
             Query = $"country=us&category={category.ToApiValue()}&pageSize=100"
         }.Uri;
 
         using var request = new HttpRequestMessage(HttpMethod.Get, uri);
-        // Authentication belongs in a header so secrets never appear in URLs or routine request logs.
-        request.Headers.Add("X-Api-Key", apiKey.Trim());
+        request.Headers.UserAgent.ParseAdd(ApplicationUserAgent);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+        if (!string.IsNullOrWhiteSpace(apiKey))
+            request.Headers.Add("X-Api-Key", apiKey.Trim());
 
         HttpResponseMessage response;
         try
@@ -126,7 +126,7 @@ public sealed class NewsApiService
 
         string message = statusCode switch
         {
-            HttpStatusCode.Unauthorized => "The NewsAPI key was rejected. Check it in Settings.",
+            HttpStatusCode.Unauthorized => "NewsAPI rejected the request. Add or update your API key in Settings.",
             HttpStatusCode.TooManyRequests => "NewsAPI's request limit was reached. Cached headlines remain visible.",
             HttpStatusCode.BadRequest => $"NewsAPI rejected the request: {providerMessage}",
             _ when (int)statusCode >= 500 => "NewsAPI is temporarily unavailable. Try again shortly.",
