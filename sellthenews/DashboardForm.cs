@@ -193,15 +193,31 @@ public partial class DashboardForm : Form
         var split = new SplitContainer
         {
             Dock = DockStyle.Fill,
-            SplitterDistance = 500,
             SplitterWidth = 8,
-            BackColor = Divider,
-            Panel1MinSize = 360,
-            Panel2MinSize = 300
+            BackColor = Divider
         };
         split.Panel1.BackColor = Canvas;
         split.Panel2.BackColor = Surface;
         split.Panel2.Padding = new Padding(24);
+
+        bool splitterInitialized = false;
+        split.Resize += (_, _) =>
+        {
+            int availableWidth = split.ClientSize.Width - split.SplitterWidth;
+            if (availableWidth <= 0)
+                return;
+
+            int minimumPanelWidth = Math.Min(240, availableWidth / 2);
+            int desiredDistance = splitterInitialized
+                ? split.SplitterDistance
+                : (int)(availableWidth * 0.6);
+
+            split.SplitterDistance = Math.Clamp(
+                desiredDistance,
+                minimumPanelWidth,
+                availableWidth - minimumPanelWidth);
+            splitterInitialized = true;
+        };
 
         newsCards.Dock = DockStyle.Fill;
         newsCards.FlowDirection = FlowDirection.TopDown;
