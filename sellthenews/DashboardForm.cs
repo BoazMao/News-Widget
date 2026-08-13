@@ -24,7 +24,7 @@ public partial class DashboardForm : Form
     private readonly Panel wsbView = new();
     private readonly FlowLayoutPanel newsCards = new();
     private readonly RichTextBox articleDetail = new();
-    private readonly RichTextBox wsbReport = new();
+    private readonly WebBrowser wsbReport = new();
     private readonly Label pageTitle = new();
     private readonly Label status = new();
     private readonly Label newsEmptyState = new();
@@ -253,15 +253,19 @@ public partial class DashboardForm : Form
         wsbView.BackColor = Surface;
         wsbView.Padding = new Padding(30);
         wsbReport.Dock = DockStyle.Fill;
-        wsbReport.ReadOnly = true;
-        wsbReport.BorderStyle = BorderStyle.None;
-        wsbReport.BackColor = Surface;
-        wsbReport.ForeColor = Color.FromArgb(226, 232, 240);
-        wsbReport.Font = new Font("Segoe UI", 11F);
-        wsbReport.DetectUrls = true;
-        wsbReport.WordWrap = true;
-        wsbReport.ScrollBars = RichTextBoxScrollBars.Vertical;
-        wsbReport.Text = "Loading WSB analysis…";
+        wsbReport.AllowWebBrowserDrop = false;
+        wsbReport.IsWebBrowserContextMenuEnabled = false;
+        wsbReport.ScriptErrorsSuppressed = true;
+        wsbReport.WebBrowserShortcutsEnabled = true;
+        wsbReport.Navigating += (_, args) =>
+        {
+            if (args.Url.Scheme is not ("http" or "https"))
+                return;
+
+            args.Cancel = true;
+            Process.Start(new ProcessStartInfo(args.Url.AbsoluteUri) { UseShellExecute = true });
+        };
+        wsbReport.DocumentText = "<html><body style='background:#111827;color:#cbd5e1;font-family:Segoe UI;padding:30px'>Loading WSB analysis…</body></html>";
         wsbView.Controls.Add(wsbReport);
     }
 
@@ -303,8 +307,7 @@ public partial class DashboardForm : Form
         try
         {
             SellTheNewsSummary summary = await wsbService.FetchLatestSummaryAsync(wsbLanguage);
-            MarkdownRichTextRenderer.Render(
-                wsbReport,
+            wsbReport.DocumentText = WsbHtmlRenderer.Render(
                 summary.Markdown,
                 summary.Title,
                 summary.AnalysisLabel,
